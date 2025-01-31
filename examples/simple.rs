@@ -1,5 +1,4 @@
 use std::{
-    ptr::null,
     sync::mpsc::{channel, Sender},
     thread,
     time::Duration,
@@ -8,15 +7,15 @@ use std::{
 use minifb::{MouseButton, MouseMode, Window, WindowOptions};
 use tokio::runtime::Runtime;
 use webview::{
-    execute_subprocess, is_subprocess, ActionState, App, AppSettings, BrowserSettings, MouseAction,
-    MouseButtons, Observer, Position, HWND,
+    execute_subprocess, is_subprocess, ActionState, MouseAction, MouseButtons, Observer,
+    PageOptions, Position, Webview, WebviewOptions,
 };
 
-struct BrowserObserver {
+struct PageObserver {
     sender: Sender<Vec<u8>>,
 }
 
-impl Observer for BrowserObserver {
+impl Observer for PageObserver {
     fn on_frame(&self, buf: &[u8], _: u32, _: u32) {
         self.sender.send(buf.to_vec()).unwrap();
     }
@@ -24,28 +23,26 @@ impl Observer for BrowserObserver {
 
 async fn run_cef() -> anyhow::Result<()> {
     let (sender, receiver) = channel();
-    let app = App::new(&AppSettings {
+    let app = Webview::new(&WebviewOptions {
         cache_path: None,
         browser_subprocess_path: None,
         scheme_path: None,
     })
     .await?;
 
-    let settings = BrowserSettings {
+    let settings = PageOptions {
         url: "https://google.com",
         frame_rate: 30,
         width: 800,
         height: 600,
         device_scale_factor: 1.0,
         is_offscreen: true,
-        window_handle: HWND(null()),
+        window_handle: None,
     };
 
-    let browser = app
-        .create_browser(&settings, BrowserObserver { sender })
-        .await?;
+    tokio::spawn(async move {
+        let browser = app.create_page(&settings, PageObserver { sender }).await?;
 
-    thread::spawn(move || {
         let mut window = Window::new(
             "simple",
             settings.width as usize,
@@ -65,13 +62,13 @@ async fn run_cef() -> anyhow::Result<()> {
             {
                 if window.get_mouse_down(MouseButton::Left) {
                     browser.on_mouse(MouseAction::Click(
-                        MouseButtons::Left,
+                        MouseButtons::kLeft,
                         ActionState::Down,
                         Some(Position { x, y }),
                     ));
 
                     browser.on_mouse(MouseAction::Click(
-                        MouseButtons::Left,
+                        MouseButtons::kLeft,
                         ActionState::Up,
                         None,
                     ));
@@ -91,7 +88,7 @@ async fn run_cef() -> anyhow::Result<()> {
         Ok::<(), anyhow::Error>(())
     });
 
-    app.closed().await;
+    // app.closed().await;
     Ok(())
 }
 

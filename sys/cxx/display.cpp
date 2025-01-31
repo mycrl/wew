@@ -8,7 +8,7 @@
 
 #include "include/wrapper/cef_helpers.h"
 
-IDisplay::IDisplay(BrowserSettings* settings, BrowserObserver observer, void* ctx)
+IDisplay::IDisplay(PageOptions* settings, PageObserver observer, void* ctx)
     : _settings(settings)
     , _observer(observer)
     , _ctx(ctx)

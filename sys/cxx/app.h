@@ -18,7 +18,7 @@
 class IApp : public CefApp, public CefBrowserProcessHandler
 {
 public:
-    IApp(AppSettings* settings, CreateAppCallback callback, void* ctx);
+    IApp(WebviewOptions* settings, CreateWebviewCallback callback, void* ctx);
     ~IApp()
     {
         router->IClose();
@@ -51,15 +51,15 @@ public:
     //
     CefRefPtr<CefClient> GetDefaultClient() override;
 
-    CefRefPtr<IBrowser> CreateBrowser(BrowserSettings* settings,
-                                      BrowserObserver observer,
+    CefRefPtr<IBrowser> CreateBrowser(PageOptions* settings,
+                                      PageObserver observer,
                                       void* ctx);
 
     std::shared_ptr<MessageRouter> router = std::make_shared<MessageRouter>();
 
 private:
-    AppSettings* _settings;
-    CreateAppCallback _callback;
+    WebviewOptions* _settings;
+    CreateWebviewCallback _callback;
     void* _ctx;
 
     IMPLEMENT_REFCOUNTING(IApp);
@@ -81,5 +81,11 @@ public:
 private:
     IMPLEMENT_REFCOUNTING(IRenderApp);
 };
+
+typedef struct
+{
+    WebviewOptions* settings;
+    CefRefPtr<IApp> ref;
+} App;
 
 #endif  // LIBWEBVIEW_APP_H

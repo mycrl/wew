@@ -16,24 +16,24 @@ endif()
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
 add_library(webview SHARED
-            lib/webview.cpp
-            lib/webview.h
-            lib/app.cpp
-            lib/app.h
-            lib/browser.cpp
-            lib/browser.h
-            lib/render.cpp
-            lib/render.h
-            lib/display.cpp
-            lib/display.h
-            lib/control.cpp
-            lib/control.h
-            lib/bridge.h
-            lib/bridge.cpp
-            lib/scheme_handler.h
-            lib/scheme_handler.cpp
-            lib/message_router.h
-            lib/message_router.cpp)
+            ./webview.cpp
+            ./webview.h
+            ./app.cpp
+            ./app.h
+            ./browser.cpp
+            ./browser.h
+            ./render.cpp
+            ./render.h
+            ./display.cpp
+            ./display.h
+            ./control.cpp
+            ./control.h
+            ./bridge.h
+            ./bridge.cpp
+            ./scheme_handler.h
+            ./scheme_handler.cpp
+            ./message_router.h
+            ./message_router.cpp)
 
 include_directories("${THIRD_PARTY_DIR}/cef")
 target_link_directories(webview PRIVATE

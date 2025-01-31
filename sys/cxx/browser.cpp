@@ -13,8 +13,8 @@
 #include "include/wrapper/cef_helpers.h"
 
 IBrowser::IBrowser(std::shared_ptr<MessageRouter> router,
-                   BrowserSettings* settings,
-                   BrowserObserver observer,
+                   PageOptions* settings,
+                   PageObserver observer,
                    void* ctx)
     : _settings(settings)
     , _observer(observer)
@@ -111,7 +111,7 @@ void IBrowser::OnLoadStart(CefRefPtr<CefBrowser> browser,
         return;
     }
 
-    _observer.on_state_change(BrowserState::BeforeLoad, _ctx);
+    _observer.on_state_change(PageState::BeforeLoad, _ctx);
 }
 
 void IBrowser::OnLoadEnd(CefRefPtr<CefBrowser> browser,
@@ -125,7 +125,7 @@ void IBrowser::OnLoadEnd(CefRefPtr<CefBrowser> browser,
         return;
     }
 
-    _observer.on_state_change(BrowserState::Load, _ctx);
+    _observer.on_state_change(PageState::Load, _ctx);
 }
 
 void IBrowser::OnLoadError(CefRefPtr<CefBrowser> browser,
@@ -141,7 +141,7 @@ void IBrowser::OnLoadError(CefRefPtr<CefBrowser> browser,
         return;
     }
 
-    _observer.on_state_change(BrowserState::LoadError, _ctx);
+    _observer.on_state_change(PageState::LoadError, _ctx);
 
     if (error_code == ERR_ABORTED)
     {
@@ -199,8 +199,8 @@ void IBrowser::OnBeforeClose(CefRefPtr<CefBrowser> browser)
 {
     CEF_REQUIRE_UI_THREAD();
 
-    _observer.on_state_change(BrowserState::BeforeClose, _ctx);
-    _observer.on_state_change(BrowserState::Close, _ctx);
+    _observer.on_state_change(PageState::BeforeClose, _ctx);
+    _observer.on_state_change(PageState::Close, _ctx);
     _browser = std::nullopt;
 }
 

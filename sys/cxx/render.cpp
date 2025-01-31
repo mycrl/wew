@@ -9,7 +9,7 @@
 
 #include <float.h>
 
-IRender::IRender(BrowserSettings* settings, BrowserObserver observer, void* ctx)
+IRender::IRender(PageOptions* settings, PageObserver observer, void* ctx)
     : _settings(settings)
     , _observer(observer)
     , _ctx(ctx)

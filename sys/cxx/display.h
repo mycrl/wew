@@ -10,7 +10,7 @@
 class IDisplay : public CefDisplayHandler
 {
 public:
-    IDisplay(BrowserSettings* settings, BrowserObserver observer, void* ctx);
+    IDisplay(PageOptions* settings, PageObserver observer, void* ctx);
     ~IDisplay()
     {
         IClose();
@@ -25,8 +25,8 @@ public:
 
 private:
     bool _is_closed = false;
-    BrowserSettings* _settings;
-    BrowserObserver _observer;
+    PageOptions* _settings;
+    PageObserver _observer;
     void* _ctx;
 
     IMPLEMENT_REFCOUNTING(IDisplay);

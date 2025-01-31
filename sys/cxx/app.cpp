@@ -10,7 +10,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "scheme_handler.h"
 
-IApp::IApp(AppSettings* settings, CreateAppCallback callback, void* ctx)
+IApp::IApp(WebviewOptions* settings, CreateWebviewCallback callback, void* ctx)
     : _settings(settings), _callback(callback), _ctx(ctx)
 {
     assert(settings);
@@ -39,8 +39,8 @@ CefRefPtr<CefClient> IApp::GetDefaultClient()
     return nullptr;
 }
 
-CefRefPtr<IBrowser> IApp::CreateBrowser(BrowserSettings* settings,
-                                        BrowserObserver observer,
+CefRefPtr<IBrowser> IApp::CreateBrowser(PageOptions* settings,
+                                        PageObserver observer,
                                         void* ctx)
 {
     assert(settings);

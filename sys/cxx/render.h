@@ -17,7 +17,7 @@
 class IRender : public CefRenderHandler
 {
 public:
-    IRender(BrowserSettings* settings, BrowserObserver observer, void* ctx);
+    IRender(PageOptions* settings, PageObserver observer, void* ctx);
     ~IRender()
     {
         IClose();
@@ -45,8 +45,8 @@ private:
     std::optional<CefRefPtr<CefBrowser>> _browser = std::nullopt;
 
     bool is_closed = false;
-    BrowserSettings* _settings;
-    BrowserObserver _observer;
+    PageOptions* _settings;
+    PageObserver _observer;
     void* _ctx;
     int _width;
     int _height;

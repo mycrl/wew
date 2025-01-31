@@ -31,8 +31,8 @@ class IBrowser : public CefClient,
 {
 public:
     IBrowser(std::shared_ptr<MessageRouter> router,
-             BrowserSettings* settings,
-             BrowserObserver observer,
+             PageOptions* settings,
+             PageObserver observer,
              void* ctx);
 
     ~IBrowser()
@@ -111,8 +111,8 @@ private:
     std::optional<CefRefPtr<CefBrowser>> _browser = std::nullopt;
 
     bool _is_closed = false;
-    BrowserSettings* _settings;
-    BrowserObserver _observer;
+    PageOptions* _settings;
+    PageObserver _observer;
     void* _ctx;
 
     IMPLEMENT_REFCOUNTING(IBrowser);
