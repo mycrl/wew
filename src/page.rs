@@ -18,9 +18,8 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct PageOptions<'a> {
+pub struct PageOptions {
     pub window_handle: Option<RawWindowHandle>,
-    pub url: &'a str,
     pub frame_rate: u32,
     pub width: u32,
     pub height: u32,
@@ -28,8 +27,8 @@ pub struct PageOptions<'a> {
     pub is_offscreen: bool,
 }
 
-unsafe impl Send for PageOptions<'_> {}
-unsafe impl Sync for PageOptions<'_> {}
+unsafe impl Send for PageOptions {}
+unsafe impl Sync for PageOptions {}
 
 #[derive(Debug)]
 pub enum PageError {
@@ -80,13 +79,14 @@ impl Page {
     /// CefRenderProcessHandler::OnBrowserCreated() in the render process.
     pub(crate) async fn new<T>(
         webview: &WebviewWrapper,
-        options: &PageOptions<'_>,
+        url: &str,
+        options: &PageOptions,
         observer: T,
     ) -> Result<Arc<Self>, PageError>
     where
         T: Observer + 'static,
     {
-        let (inner, mut receiver) = webview.create_page(options, observer);
+        let (inner, mut receiver) = webview.create_page(url, options, observer);
 
         let (tx, rx) = oneshot::channel::<bool>();
         tokio::spawn(async move {
@@ -135,9 +135,7 @@ impl Page {
     {
         let runtime = self.runtime.clone();
         let prcesser = Arc::new(BridgeHandler::new(observer));
-        let _ = self
-            .inner
-            .observer
+        let _ = unsafe { &*self.inner.observer }
             .ctx
             .write()
             .unwrap()

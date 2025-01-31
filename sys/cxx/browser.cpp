@@ -13,7 +13,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 IBrowser::IBrowser(std::shared_ptr<MessageRouter> router,
-                   PageOptions* settings,
+                   PageOptions settings,
                    PageObserver observer,
                    void* ctx)
     : _settings(settings)
@@ -23,7 +23,6 @@ IBrowser::IBrowser(std::shared_ptr<MessageRouter> router,
     , IRender(settings, observer, ctx)
     , IDisplay(settings, observer, ctx)
 {
-    assert(settings);
 }
 
 CefRefPtr<CefDragHandler> IBrowser::GetDragHandler()
@@ -93,7 +92,7 @@ CefRefPtr<CefLoadHandler> IBrowser::GetLoadHandler()
 
 CefRefPtr<CefRenderHandler> IBrowser::GetRenderHandler()
 {
-    if (this->_settings->is_offscreen)
+    if (this->_settings.is_offscreen)
     {
         return this;
     }
@@ -159,6 +158,8 @@ void IBrowser::OnAfterCreated(CefRefPtr<CefBrowser> browser)
         return;
     }
 
+    browser->GetHost()->WasResized();
+
     IRender::SetBrowser(browser);
     IControl::SetBrowser(browser);
     IBridgeMaster::SetBrowser(browser);
@@ -178,7 +179,7 @@ bool IBrowser::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                              CefLifeSpanHandler::WindowOpenDisposition target_disposition,
                              bool user_gesture,
                              const CefPopupFeatures& popupFeatures,
-                             CefWindowInfo& windowInfo,
+                             CefWindowInfo& window_info,
                              CefRefPtr<CefClient>& client,
                              CefBrowserSettings& settings,
                              CefRefPtr<CefDictionaryValue>& extra_info,
@@ -218,7 +219,9 @@ void IBrowser::SetDevToolsOpenState(bool is_open)
 
     if (is_open)
     {
-        _browser.value()->GetHost()->ShowDevTools(CefWindowInfo(), nullptr, CefBrowserSettings(),
+        _browser.value()->GetHost()->ShowDevTools(CefWindowInfo(), 
+                                                  nullptr, 
+                                                  CefBrowserSettings(),
                                                   CefPoint());
     }
     else

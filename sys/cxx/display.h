@@ -10,7 +10,7 @@
 class IDisplay : public CefDisplayHandler
 {
 public:
-    IDisplay(PageOptions* settings, PageObserver observer, void* ctx);
+    IDisplay(PageOptions settings, PageObserver observer, void* ctx);
     ~IDisplay()
     {
         IClose();
@@ -25,7 +25,7 @@ public:
 
 private:
     bool _is_closed = false;
-    PageOptions* _settings;
+    PageOptions _settings;
     PageObserver _observer;
     void* _ctx;
 

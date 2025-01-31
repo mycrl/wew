@@ -37,23 +37,7 @@ void* create_webview(WebviewOptions* settings, CreateWebviewCallback callback, v
 
     App* app = new App;
     app->ref = new IApp(settings, callback, ctx);
-    app->settings = settings;
     return app;
-}
-
-void* create_page(void* app_ptr,
-                  PageOptions* settings,
-                  PageObserver observer,
-                  void* ctx)
-{
-    assert(app_ptr);
-    assert(settings);
-
-    auto app = (App*)app_ptr;
-
-    Browser* browser = new Browser;
-    browser->ref = app->ref->CreateBrowser(settings, observer, ctx);
-    return browser;
 }
 
 int webview_run(void* app_ptr, int argc, char** argv)
@@ -65,36 +49,7 @@ int webview_run(void* app_ptr, int argc, char** argv)
     auto main_args = get_main_args(argc, argv);
     CefExecuteProcess(main_args, app->ref, nullptr);
 
-    CefSettings cef_settings;
-    cef_settings.windowless_rendering_enabled = true;
-    cef_settings.chrome_runtime = false;
-    cef_settings.no_sandbox = true;
-    cef_settings.background_color = 0x00ffffff;
-
-    // macos not support the multi threaded message loop.
-#ifdef MACOS
-    cef_settings.multi_threaded_message_loop = false;
-#else
-    cef_settings.multi_threaded_message_loop = true;
-#endif
-
-    CefString(&cef_settings.locale).FromString("zh-CN");
-
-    auto cache_path = app->settings->cache_path;
-    if (cache_path != nullptr)
-    {
-        CefString(&cef_settings.cache_path).FromString(cache_path);
-        CefString(&cef_settings.log_file).FromString(std::string(cache_path) + "/webview.log");
-    }
-
-    auto browser_subprocess_path = app->settings->browser_subprocess_path;
-    if (browser_subprocess_path != nullptr)
-    {
-        CefString(&cef_settings.browser_subprocess_path).FromString(browser_subprocess_path);
-    }
-
-    assert(&cef_settings);
-    if (!CefInitialize(main_args, cef_settings, app->ref, nullptr))
+    if (!CefInitialize(main_args, app->ref->cef_settings, app->ref, nullptr))
     {
         return -1;
     }
@@ -116,6 +71,22 @@ void webview_exit(void* app_ptr)
 #endif
     CefShutdown();
     delete app;
+}
+
+void* create_page(void* app_ptr,
+                  const char* url,
+                  PageOptions* settings,
+                  PageObserver observer,
+                  void* ctx)
+{
+    assert(app_ptr);
+    assert(settings);
+
+    auto app = (App*)app_ptr;
+
+    Browser* browser = new Browser;
+    browser->ref = app->ref->CreateBrowser(std::string(url), settings, observer, ctx);
+    return browser;
 }
 
 void page_exit(void* browser)

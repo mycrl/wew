@@ -9,14 +9,13 @@
 
 #include <float.h>
 
-IRender::IRender(PageOptions* settings, PageObserver observer, void* ctx)
+IRender::IRender(PageOptions settings, PageObserver observer, void* ctx)
     : _settings(settings)
     , _observer(observer)
     , _ctx(ctx)
-    , _width(settings->width)
-    , _height(settings->height)
+    , _width(settings.width)
+    , _height(settings.height)
 {
-    assert(settings);
 }
 
 void IRender::SetBrowser(CefRefPtr<CefBrowser> browser)
@@ -78,9 +77,9 @@ bool IRender::GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo& info)
         return false;
     }
 
-    if (abs(info.device_scale_factor - _settings->device_scale_factor) > FLT_EPSILON)
+    if (abs(info.device_scale_factor - _settings.device_scale_factor) > FLT_EPSILON)
     {
-        info.device_scale_factor = _settings->device_scale_factor;
+        info.device_scale_factor = _settings.device_scale_factor;
         return true;
     }
     else

@@ -8,12 +8,11 @@
 
 #include "include/wrapper/cef_helpers.h"
 
-IDisplay::IDisplay(PageOptions* settings, PageObserver observer, void* ctx)
+IDisplay::IDisplay(PageOptions settings, PageObserver observer, void* ctx)
     : _settings(settings)
     , _observer(observer)
     , _ctx(ctx)
 {
-    assert(settings);
 }
 
 void IDisplay::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString& title)
@@ -24,7 +23,7 @@ void IDisplay::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString& tit
         return;
     }
 
-    if (_settings->is_offscreen)
+    if (_settings.is_offscreen)
     {
         _observer.on_title_change(title.ToString().c_str(), _ctx);
     }
@@ -44,7 +43,7 @@ void IDisplay::OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullsc
         return;
     }
 
-    if (_settings->is_offscreen)
+    if (_settings.is_offscreen)
     {
         _observer.on_fullscreen_change(fullscreen, _ctx);
     }
@@ -61,7 +60,7 @@ void IDisplay::OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullsc
         {
             SetWindowLong(browser->GetHost()->GetWindowHandle(), GWL_STYLE,
                           WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE);
-            SetWindowPos(browser->GetHost()->GetWindowHandle(), NULL, 0, 0, 1280, 720, SWP_FRAMECHANGED);
+            SetWindowPos(browser->GetHost()->GetWindowHandle(), NULL, 0, 0, 800, 600, SWP_FRAMECHANGED);
         }
     #endif
     }

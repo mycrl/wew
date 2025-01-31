@@ -31,18 +31,17 @@ async fn run_cef() -> anyhow::Result<()> {
     .await?;
 
     let settings = PageOptions {
-        url: "https://google.com",
         frame_rate: 30,
         width: 800,
         height: 600,
         device_scale_factor: 1.0,
-        is_offscreen: true,
+        is_offscreen: false,
         window_handle: None,
     };
 
-    tokio::spawn(async move {
-        let browser = app.create_page(&settings, PageObserver { sender }).await?;
+    let browser = app.create_page("https://google.com", &settings, PageObserver { sender }).await?;
 
+    tokio::spawn(async move {
         let mut window = Window::new(
             "simple",
             settings.width as usize,
@@ -88,7 +87,7 @@ async fn run_cef() -> anyhow::Result<()> {
         Ok::<(), anyhow::Error>(())
     });
 
-    // app.closed().await;
+    app.wait_exit().await;
     Ok(())
 }
 

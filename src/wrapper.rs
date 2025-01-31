@@ -60,7 +60,6 @@ fn get_args() -> Vec<*const c_char> {
 /// An example CefApp implementation can be seen in cefsimple/simple_app.h and
 /// cefsimple/simple_app.cc.
 pub(crate) struct WebviewWrapper {
-    options: webview_sys::WebviewOptions,
     raw: *mut c_void,
 }
 
@@ -78,7 +77,7 @@ impl WebviewWrapper {
     }
 
     pub(crate) fn new(options: &WebviewOptions, tx: Sender<()>) -> Option<Self> {
-        let options = webview_sys::WebviewOptions {
+        let mut options = webview_sys::WebviewOptions {
             cache_path: ffi::into_opt(options.cache_path) as _,
             scheme_path: ffi::into_opt(options.scheme_path) as _,
             browser_subprocess_path: ffi::into_opt(options.browser_subprocess_path) as _,
@@ -86,17 +85,23 @@ impl WebviewWrapper {
 
         let raw = unsafe {
             create_webview(
-                &options as *const _ as _,
+                &mut options,
                 Some(Self::callback),
                 Box::into_raw(Box::new(tx)) as *mut _,
             )
         };
 
+        {
+            ffi::free(options.cache_path);
+            ffi::free(options.scheme_path);
+            ffi::free(options.browser_subprocess_path);
+        }
+
         if raw.is_null() {
             return None;
         }
 
-        Some(Self { options, raw })
+        Some(Self { raw })
     }
 
     /// Create a new browser using the window parameters specified by
@@ -111,13 +116,14 @@ impl WebviewWrapper {
     /// CefRenderProcessHandler::OnBrowserCreated() in the render process.
     pub(crate) fn create_page<T>(
         &self,
-        options: &PageOptions<'_>,
+        url: &str,
+        options: &PageOptions,
         observer: T,
     ) -> (PageWrapper, UnboundedReceiver<ChannelEvents>)
     where
         T: Observer + 'static,
     {
-        PageWrapper::new(&self, options, observer)
+        PageWrapper::new(&self, url, options, observer)
     }
 
     pub(crate) fn run(&self) {
@@ -132,12 +138,6 @@ impl Drop for WebviewWrapper {
     fn drop(&mut self) {
         unsafe {
             webview_exit(self.raw);
-        }
-
-        {
-            ffi::free(self.options.browser_subprocess_path);
-            ffi::free(self.options.cache_path);
-            ffi::free(self.options.scheme_path);
         }
     }
 }
@@ -160,8 +160,7 @@ impl Drop for WebviewWrapper {
 /// An example CefClient implementation can be seen in
 /// cefsimple/simple_handler.h and cefsimple/simple_handler.cc.
 pub(crate) struct PageWrapper {
-    options: webview_sys::PageOptions,
-    pub observer: ObserverWrapper,
+    pub observer: *mut ObserverWrapper,
     pub raw: *mut c_void,
 }
 
@@ -171,14 +170,14 @@ unsafe impl Sync for PageWrapper {}
 impl PageWrapper {
     fn new<T>(
         webview: &WebviewWrapper,
-        options: &PageOptions<'_>,
+        url: &str,
+        options: &PageOptions,
         observer: T,
     ) -> (Self, UnboundedReceiver<ChannelEvents>)
     where
         T: Observer + 'static,
     {
         let options = webview_sys::PageOptions {
-            url: ffi::into(options.url) as _,
             frame_rate: options.frame_rate,
             width: options.width,
             height: options.height,
@@ -195,9 +194,13 @@ impl PageWrapper {
         };
 
         let (observer, rx) = ObserverWrapper::new(observer);
+        let observer = Box::into_raw(Box::new(observer));
+
+        let url = ffi::into(url);
         let raw = unsafe {
             create_page(
                 webview.raw,
+                url,
                 &options as *const _ as _,
                 webview_sys::PageObserver {
                     on_state_change: Some(ObserverWrapper::on_state_change),
@@ -207,14 +210,17 @@ impl PageWrapper {
                     on_fullscreen_change: Some(ObserverWrapper::on_fullscreen_change),
                     on_bridge: Some(ObserverWrapper::on_bridge),
                 },
-                &observer as *const _ as _,
+                observer as _,
             )
         };
+
+        {
+            ffi::free(url);
+        }
 
         (
             Self {
                 observer,
-                options,
                 raw,
             },
             rx,
@@ -338,7 +344,7 @@ impl Drop for PageWrapper {
             page_exit(self.raw as _);
         }
 
-        ffi::free(self.options.url);
+        drop(unsafe { Box::from_raw(self.observer) });
     }
 }
 
@@ -389,9 +395,8 @@ pub enum ChannelEvents {
 pub(crate) struct ObserverWrapper {
     pub inner: Arc<dyn Observer>,
     pub tx: Arc<UnboundedSender<ChannelEvents>>,
-    pub ctx: Arc<
+    pub ctx:
         RwLock<Option<Arc<dyn Fn(String, Box<dyn FnOnce(Result<String, String>) + Send + Sync>)>>>,
-    >,
 }
 
 unsafe impl Send for ObserverWrapper {}
@@ -405,9 +410,9 @@ impl ObserverWrapper {
         let (tx, rx) = unbounded_channel();
         (
             Self {
-                ctx: Arc::new(RwLock::new(None)),
                 inner: Arc::new(observer),
                 tx: Arc::new(tx),
+                ctx: RwLock::new(None),
             },
             rx,
         )

@@ -51,14 +51,16 @@ public:
     //
     CefRefPtr<CefClient> GetDefaultClient() override;
 
-    CefRefPtr<IBrowser> CreateBrowser(PageOptions* settings,
+    CefRefPtr<IBrowser> CreateBrowser(std::string url,
+                                      PageOptions* settings,
                                       PageObserver observer,
                                       void* ctx);
 
     std::shared_ptr<MessageRouter> router = std::make_shared<MessageRouter>();
 
+    CefSettings cef_settings;
 private:
-    WebviewOptions* _settings;
+    std::optional<std::string> _scheme_path = std::nullopt;
     CreateWebviewCallback _callback;
     void* _ctx;
 
@@ -84,7 +86,6 @@ private:
 
 typedef struct
 {
-    WebviewOptions* settings;
     CefRefPtr<IApp> ref;
 } App;
 

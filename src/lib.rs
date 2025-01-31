@@ -77,7 +77,7 @@ pub fn is_subprocess() -> bool {
     args().find(|v| v.contains("--type")).is_some()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct WebviewOptions<'a> {
     pub cache_path: Option<&'a str>,
     pub browser_subprocess_path: Option<&'a str>,
@@ -156,13 +156,14 @@ impl Webview {
     /// CefRenderProcessHandler::OnBrowserCreated() in the render process.
     pub async fn create_page<T>(
         &self,
-        settings: &PageOptions<'_>,
+        url: &str,
+        settings: &PageOptions,
         observer: T,
     ) -> Result<Arc<Page>, PageError>
     where
         T: Observer + 'static,
     {
-        Page::new(&self.inner, settings, observer).await
+        Page::new(&self.inner, url, settings, observer).await
     }
 
     pub async fn wait_exit(&self) {

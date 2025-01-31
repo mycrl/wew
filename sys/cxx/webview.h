@@ -27,7 +27,6 @@ typedef struct
 
 typedef struct
 {
-    char* url;
     void* window_handle;
     uint32_t frame_rate;
     uint32_t width;
@@ -130,6 +129,7 @@ extern "C" {
     EXPORT void webview_exit(void* app);
 
     EXPORT void* create_page(void* app,
+                             const char* url,
                              PageOptions* settings,
                              PageObserver observer,
                              void* ctx);
