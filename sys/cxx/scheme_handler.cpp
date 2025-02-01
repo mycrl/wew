@@ -27,6 +27,17 @@ const std::string ClientSchemeHandler::FormatMime(std::string& url)
 
 ClientSchemeHandler::ClientSchemeHandler(std::string dir) : _file_root(dir)
 {
+    // If the directory path has a redundant '/' symbol, delete it.
+    if (_file_root[_file_root.size() - 1] != '/')
+    {
+        _file_root.push_back('/');
+    }
+
+    // Paths starting with '\\?\' may exist on Windows.
+    if (_file_root.find("\\\\?\\") == 0)
+    {
+        _file_root.erase(0, 4);
+    }
 }
 
 bool ClientSchemeHandler::Open(CefRefPtr<CefRequest> request,
@@ -35,30 +46,45 @@ bool ClientSchemeHandler::Open(CefRefPtr<CefRequest> request,
 {
     DCHECK(!CefCurrentlyOn(TID_UI) && !CefCurrentlyOn(TID_IO));
 
+    // maybe xxxx://xxx.xxxx.xxx/index.html/#xxx?xxx=xxx
     _url = request->GetURL();
-    _url.erase(0, SchemeName.size() + 3);
-    _url.erase(0, SchemeDomain.size() + 1);
 
-    _url = _url.substr(0, _url.rfind('#'));
+    // remove xxxx://
+    if (SchemeName.size() > 0)
+    {
+        _url.erase(0, SchemeName.size() + 3);
+    }
+
+    // remove xxx.xxxx.xxx/
+    if (SchemeDomain.size() > 0)
+    {
+        _url.erase(0, SchemeDomain.size() + 1);
+    }
+    else
+    {
+        _url.erase(0, 11);
+    }
+
+    // remove ?xxx=xxx
     _url = _url.substr(0, _url.rfind('?'));
 
+    // remove #xxx
+    _url = _url.substr(0, _url.rfind('#'));
+
+    // remove /
     if (_url[_url.size() - 1] == '/')
     {
         _url.pop_back();
     }
 
-    if (_file_root[_file_root.size() - 1] != '/')
+    // default / to index.html
+    if (_url.size() == 0)
     {
-        _file_root.push_back('/');
+        _url = "index.html";
     }
 
-    if (_file_root.find("\\\\?\\") == 0)
-    {
-        _file_root.erase(0, 4);
-    }
-
+    // /xxxx/xxx + /index.html
     _url = _file_root + _url;
-    printf("== cef scheme path rewrite: %s\n", _url.c_str());
 
 #ifdef WIN32
     int size = MultiByteToWideChar(CP_UTF8, 0, _url.c_str(), -1, NULL, 0);

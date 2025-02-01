@@ -388,6 +388,7 @@ pub trait Observer: Send + Sync {
     fn on_fullscreen_change(&self, fullscreen: bool) {}
 }
 
+#[derive(Debug)]
 pub enum ChannelEvents {
     StateChange(PageState),
 }
@@ -424,10 +425,14 @@ impl ObserverWrapper {
     /// The methods of this class will be called on the browser process UI
     /// thread or render process main thread (TID_RENDERER).
     extern "C" fn on_state_change(state: PageState, this: *mut c_void) {
-        (unsafe { &*(this as *mut Self) })
+        let this = unsafe { &*(this as *mut Self) };
+
+        this
             .tx
             .send(ChannelEvents::StateChange(state))
             .expect("channel is closed, message send failed!");
+
+        this.inner.on_state_change(state);
     }
 
     /// Called when the IME composition range has changed.

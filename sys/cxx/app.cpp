@@ -68,7 +68,7 @@ CefRefPtr<CefClient> IApp::GetDefaultClient()
     return nullptr;
 }
 
-CefRefPtr<IBrowser> IApp::CreateBrowser(std::string url, 
+CefRefPtr<IBrowser> IApp::CreateBrowser(std::string url,
                                         PageOptions* settings_ptr,
                                         PageObserver observer,
                                         void* ctx)
@@ -85,12 +85,18 @@ CefRefPtr<IBrowser> IApp::CreateBrowser(std::string url,
     broswer_settings.databases = cef_state_t::STATE_DISABLED;
 
     CefWindowInfo window_info;
-    window_info.bounds.width = settings.width;
-    window_info.bounds.height = settings.height;
 
-    if (settings.is_offscreen)
+    if (settings.window_handle)
     {
-        window_info.SetAsWindowless((CefWindowHandle)(settings.window_handle));
+        if (settings.is_offscreen)
+        {
+            window_info.SetAsWindowless((CefWindowHandle)(settings.window_handle));
+        }
+        else
+        {
+            window_info.SetAsChild((CefWindowHandle)(settings.window_handle), 
+                                   CefRect(0, 0, settings.width, settings.height));
+        }
     }
 
     CefRefPtr<IBrowser> browser = new IBrowser(router, settings, observer, ctx);
