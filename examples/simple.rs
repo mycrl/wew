@@ -39,7 +39,9 @@ async fn run_cef() -> anyhow::Result<()> {
         window_handle: None,
     };
 
-    let browser = app.create_page("https://google.com", &settings, PageObserver { sender }).await?;
+    let browser = app
+        .create_page("https://google.com", &settings, PageObserver { sender })
+        .await?;
 
     tokio::spawn(async move {
         let mut window = Window::new(

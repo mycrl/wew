@@ -218,13 +218,7 @@ impl PageWrapper {
             ffi::free(url);
         }
 
-        (
-            Self {
-                observer,
-                raw,
-            },
-            rx,
-        )
+        (Self { observer, raw }, rx)
     }
 
     /// Send a mouse click event to the browser.
@@ -427,8 +421,7 @@ impl ObserverWrapper {
     extern "C" fn on_state_change(state: PageState, this: *mut c_void) {
         let this = unsafe { &*(this as *mut Self) };
 
-        this
-            .tx
+        this.tx
             .send(ChannelEvents::StateChange(state))
             .expect("channel is closed, message send failed!");
 

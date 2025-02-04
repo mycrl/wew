@@ -66,11 +66,28 @@ fn main() -> Result<()> {
         }
 
         if !is_exsit(&cef_path) {
-            if !is_exsit(&join(&&out_dir, CEF_VERSION)) {
-                exec("tar -xf ./cef.tar.bz2 -C ./", &out_dir)?;
+            if !is_exsit(&join(&out_dir, "./7z")) {
+                exec(&[
+                    "Invoke-WebRequest -Uri https://www.7-zip.org/a/7zr.exe -OutFile 7zr.exe",
+                    "Invoke-WebRequest -Uri https://www.7-zip.org/a/7z2409-extra.7z -OutFile 7z.7z",
+                    "./7zr.exe e \"./7z.7z\" -o\"./7z\" -y",
+                    "Remove-Item ./7zr.exe",
+                    "Remove-Item ./7z.7z"
+                ].join(";"), &out_dir)?;
             }
 
-            exec(&format!("Rename-Item {} ./cef", CEF_VERSION), &out_dir)?;
+            exec(
+                &[
+                    "./7z/7za.exe e \"./cef.tar.bz2\" -o\"./\" -y",
+                    "./7z/7za.exe x \"./cef.tar\" -o\"./\" -y",
+                    "Remove-Item -Path ./7z -Recurse",
+                    "Remove-Item ./cef.tar",
+                    "Remove-Item ./cef.tar.bz2",
+                    &format!("Rename-Item {} ./cef", CEF_VERSION),
+                ]
+                .join(";"),
+                &out_dir,
+            )?;
         }
 
         if !is_exsit(&join(&cef_path, "./libcef_dll_wrapper")) {
