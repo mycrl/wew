@@ -8,9 +8,7 @@ use std::{sync::Arc, thread};
 use tokio::sync::{oneshot, Notify};
 use wrapper::{get_args, WebviewWrapper};
 
-pub use webview_sys::{
-    Modifiers, MouseButtons, PageState, TouchEventType, TouchPointerType,
-};
+pub use webview_sys::{Modifiers, MouseButtons, PageState, TouchEventType, TouchPointerType};
 
 pub use self::{
     page::{BridgeObserver, Page, PageError, PageOptions},

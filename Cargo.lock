@@ -1023,17 +1023,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "webview-build"
-version = "0.1.0"
-
-[[package]]
 name = "webview-sys"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "bindgen",
  "cc",
- "webview-build",
 ]
 
 [[package]]

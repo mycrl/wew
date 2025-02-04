@@ -1,7 +1,6 @@
 use std::{env, fs, path::Path, process::Command};
 
 use anyhow::{anyhow, Result};
-use webview_build::CEF_PATH;
 
 fn is_exsit(dir: &str) -> bool {
     fs::metadata(dir).is_ok()
@@ -33,15 +32,25 @@ fn exec(command: &str, work_dir: &str) -> Result<String> {
 fn main() -> Result<()> {
     let target = env::var("TARGET")?;
     let out_dir = env::var("OUT_DIR")?;
+    let cef_path: &str = &join(&out_dir, "./cef");
 
     println!("cargo:rerun-if-changed=./cxx");
     println!("cargo:rerun-if-changed=./build.rs");
 
+    if !is_exsit(cef_path) {
+        #[cfg(target_os = "windows")]
+        {
+            exec("Invoke-WebRequest -Uri https://github.com/mycrl/webview-rs/releases/download/distributions/cef-windows.zip -OutFile ./cef.zip", &out_dir)?;
+            exec("Expand-Archive -Path cef.zip -DestinationPath ./", &out_dir)?;
+            exec("Remove-Item ./cef.zip", &out_dir)?;
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
-        if !is_exsit(&join(CEF_PATH, "./libcef_dll_wrapper")) {
-            exec("cmake -DCMAKE_BUILD_TYPE=Release .", CEF_PATH)?;
-            exec("cmake --build . --config Release", CEF_PATH)?;
+        if !is_exsit(&join(cef_path, "./libcef_dll_wrapper")) {
+            exec("cmake -DCMAKE_BUILD_TYPE=Release .", cef_path)?;
+            exec("cmake --build . --config Release", cef_path)?;
         }
     }
 
@@ -87,7 +96,7 @@ fn main() -> Result<()> {
             .file("./cxx/scheme_handler.cpp")
             .file("./cxx/message_router.cpp");
 
-        cfgs.include(CEF_PATH);
+        cfgs.include(cef_path);
 
         #[cfg(target_os = "windows")]
         cfgs.define("WIN32", Some("1"))
@@ -117,12 +126,12 @@ fn main() -> Result<()> {
         println!("cargo:rustc-link-search=all={}", &out_dir);
         println!(
             "cargo:rustc-link-search=all={}",
-            join(CEF_PATH, "./Release")
+            join(cef_path, "./Release")
         );
 
         println!(
             "cargo:rustc-link-search=all={}",
-            join(CEF_PATH, "./libcef_dll_wrapper/Release")
+            join(cef_path, "./libcef_dll_wrapper/Release")
         );
 
         #[cfg(target_os = "windows")]
