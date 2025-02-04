@@ -1,6 +1,7 @@
 use std::{env, fs, path::Path, process::Command};
 
 use anyhow::{anyhow, Result};
+use webview_build::CEF_PATH;
 
 fn is_exsit(dir: &str) -> bool {
     fs::metadata(dir).is_ok()
@@ -29,15 +30,20 @@ fn exec(command: &str, work_dir: &str) -> Result<String> {
     }
 }
 
-static CEF_VERSION: &str = "cef_binary_116.0.22+g480de66+chromium-116.0.5845.188_windows64_minimal";
-
 fn main() -> Result<()> {
     let target = env::var("TARGET")?;
     let out_dir = env::var("OUT_DIR")?;
 
     println!("cargo:rerun-if-changed=./cxx");
     println!("cargo:rerun-if-changed=./build.rs");
-    println!("cargo:CEF_RELEASE={}", &join(&&out_dir, "./cef"));
+
+    #[cfg(target_os = "windows")]
+    {
+        if !is_exsit(&join(CEF_PATH, "./libcef_dll_wrapper")) {
+            exec("cmake -DCMAKE_BUILD_TYPE=Release .", CEF_PATH)?;
+            exec("cmake --build . --config Release", CEF_PATH)?;
+        }
+    }
 
     {
         bindgen::Builder::default()
@@ -50,50 +56,6 @@ fn main() -> Result<()> {
             .header("./cxx/webview.h")
             .generate()?
             .write_to_file(&join(&out_dir, "bindings.rs"))?;
-    }
-
-    {
-        let cef_path = join(&&out_dir, "./cef");
-        if !is_exsit(&join(&&out_dir, "./cef.tar.bz2")) {
-            exec(
-                &format!(
-                    "Invoke-WebRequest -Uri https://cef-builds.spotifycdn.com/{}.tar.bz2 -OutFile cef.tar.bz2",
-                    CEF_VERSION
-                ),
-                &out_dir,
-            )
-            ?;
-        }
-
-        if !is_exsit(&cef_path) {
-            if !is_exsit(&join(&out_dir, "./7z")) {
-                exec(&[
-                    "Invoke-WebRequest -Uri https://www.7-zip.org/a/7zr.exe -OutFile 7zr.exe",
-                    "Invoke-WebRequest -Uri https://www.7-zip.org/a/7z2409-extra.7z -OutFile 7z.7z",
-                    "./7zr.exe e \"./7z.7z\" -o\"./7z\" -y",
-                    "Remove-Item ./7zr.exe",
-                    "Remove-Item ./7z.7z"
-                ].join(";"), &out_dir)?;
-            }
-
-            exec(
-                &[
-                    "./7z/7za.exe e \"./cef.tar.bz2\" -o\"./\" -y",
-                    "./7z/7za.exe x \"./cef.tar\" -o\"./\" -y",
-                    "Remove-Item -Path ./7z -Recurse",
-                    "Remove-Item ./cef.tar",
-                    "Remove-Item ./cef.tar.bz2",
-                    &format!("Rename-Item {} ./cef", CEF_VERSION),
-                ]
-                .join(";"),
-                &out_dir,
-            )?;
-        }
-
-        if !is_exsit(&join(&cef_path, "./libcef_dll_wrapper")) {
-            exec("cmake -DCMAKE_BUILD_TYPE=Release .", &cef_path)?;
-            exec("cmake --build . --config Release", &cef_path)?;
-        }
     }
 
     {
@@ -125,7 +87,7 @@ fn main() -> Result<()> {
             .file("./cxx/scheme_handler.cpp")
             .file("./cxx/message_router.cpp");
 
-        cfgs.include(join(&out_dir, "./cef"));
+        cfgs.include(CEF_PATH);
 
         #[cfg(target_os = "windows")]
         cfgs.define("WIN32", Some("1"))
@@ -149,18 +111,19 @@ fn main() -> Result<()> {
         #[cfg(target_os = "linux")]
         cfgs.define("LINUX", Some("1")).define("CEF_X11", Some("1"));
 
-        cfgs.compile("package");
+        cfgs.compile("sys");
+
+        println!("cargo:rustc-link-lib=static=sys");
+        println!("cargo:rustc-link-search=all={}", &out_dir);
+        println!(
+            "cargo:rustc-link-search=all={}",
+            join(CEF_PATH, "./Release")
+        );
 
         println!(
             "cargo:rustc-link-search=all={}",
-            join(&out_dir, "./cef/libcef_dll_wrapper/Release")
+            join(CEF_PATH, "./libcef_dll_wrapper/Release")
         );
-        println!(
-            "cargo:rustc-link-search=all={}",
-            join(&out_dir, "./cef/Release")
-        );
-        println!("cargo:rustc-link-search=all={}", &out_dir);
-        println!("cargo:rustc-link-lib=static=package");
 
         #[cfg(target_os = "windows")]
         {

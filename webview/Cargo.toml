@@ -1,0 +1,22 @@
+[package]
+name = "webview"
+version = "0.1.0"
+edition = "2021"
+
+[[example]]
+name = "simple"
+
+[dependencies]
+async-trait = "0.1"
+raw-window-handle = "0.6.2"
+webview-sys = { path = "../sys" }
+tokio = { version = "1.32.0", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4.25"
+
+[dev-dependencies]
+anyhow = "1"
+minifb = "0.24"
+serde = {version = "1", features = ["derive"]}
+tokio = {version = "1", features = ["full"]}

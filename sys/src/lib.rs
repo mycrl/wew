@@ -8,5 +8,3 @@
 #![allow(clippy::type_complexity)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-
-pub static OUT_DIR: &str = env!("OUT_DIR");

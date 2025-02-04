@@ -2,35 +2,20 @@ mod page;
 mod strings;
 mod wrapper;
 
-use std::{
-    env::args,
-    ffi::{c_char, c_int},
-};
+use std::{env::args, ffi::c_int};
 
 use std::{sync::Arc, thread};
 use tokio::sync::{oneshot, Notify};
-use wrapper::WebviewWrapper;
+use wrapper::{get_args, WebviewWrapper};
 
-use self::strings::StringConvert;
-
-pub use webview_sys::{Modifiers, MouseButtons, PageState, TouchEventType, TouchPointerType};
+pub use webview_sys::{
+    Modifiers, MouseButtons, PageState, TouchEventType, TouchPointerType,
+};
 
 pub use self::{
     page::{BridgeObserver, Page, PageError, PageOptions},
     wrapper::Observer,
 };
-
-#[macro_export]
-macro_rules! args_ptr {
-    () => {
-        std::env::args()
-            .map(|arg| arg.as_pstr())
-            .collect::<Vec<_>>()
-            .iter()
-            .map(|arg| arg.0)
-            .collect::<Vec<*const c_char>>()
-    };
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Position {
@@ -68,7 +53,7 @@ pub fn execute_subprocess() -> ! {
         panic!("webview sub process does not work in tokio runtime!");
     }
 
-    let args = args_ptr!();
+    let args = get_args();
     unsafe { webview_sys::execute_sub_process(args.len() as c_int, args.as_ptr() as _) };
     unreachable!("sub process closed, this is a bug!")
 }

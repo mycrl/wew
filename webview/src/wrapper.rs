@@ -28,7 +28,7 @@ use crate::{
 };
 
 #[inline]
-fn get_args() -> Vec<*const c_char> {
+pub(crate) fn get_args() -> Vec<*const c_char> {
     args()
         .map(|arg| arg.as_pstr())
         .collect::<Vec<_>>()
