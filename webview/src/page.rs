@@ -1,18 +1,13 @@
-use std::{ffi::c_char, os::raw::c_void, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use raw_window_handle::RawWindowHandle;
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::{
-    runtime::Handle,
-    sync::oneshot::{self, channel, Sender},
-    time::timeout,
-};
+use tokio::{runtime::Handle, sync::oneshot::channel, time::timeout};
 
-use webview_sys::{page_bridge_call, Modifiers, PageState, TouchEventType, TouchPointerType};
+use webview_sys::{Modifiers, PageState, TouchEventType, TouchPointerType};
 
 use crate::{
-    strings::{ffi, StringConvert},
     wrapper::{ChannelEvents, PageWrapper},
     ActionState, ImeAction, MouseAction, Observer, WebviewWrapper,
 };
@@ -33,7 +28,9 @@ unsafe impl Sync for PageOptions {}
 #[derive(Debug)]
 pub enum PageError {
     CreateBrowserFailed,
-    BridgeError(BridgeError),
+    BridgeSerdeError,
+    BridgeTimeout,
+    BridgeCallError,
 }
 
 impl std::error::Error for PageError {}
@@ -88,7 +85,7 @@ impl Page {
     {
         let (inner, mut receiver) = webview.create_page(url, options, observer);
 
-        let (tx, rx) = oneshot::channel::<bool>();
+        let (tx, rx) = channel::<bool>();
         tokio::spawn(async move {
             let mut tx = Some(tx);
 
@@ -122,9 +119,22 @@ impl Page {
         Q: Serialize,
         S: DeserializeOwned,
     {
-        Bridge::call(self.inner.raw, req)
-            .await
-            .map_err(|e| PageError::BridgeError(e))
+        let (tx, rx) = channel::<Option<String>>();
+        let req = serde_json::to_string(req).map_err(|_| PageError::BridgeSerdeError)?;
+
+        self.inner.call(&req, tx);
+
+        Ok(
+            if let Some(ret) = timeout(Duration::from_secs(10), rx)
+                .await
+                .map_err(|_| PageError::BridgeTimeout)?
+                .map_err(|_| PageError::BridgeCallError)?
+            {
+                Some(serde_json::from_str(&ret).map_err(|_| PageError::BridgeSerdeError)?)
+            } else {
+                None
+            },
+        )
     }
 
     pub fn on_bridge<Q, S, H>(&self, observer: H)
@@ -268,62 +278,5 @@ where
                 .map_err(|s| s.to_string())?,
         )
         .map_err(|s| s.to_string())
-    }
-}
-
-#[derive(Debug)]
-pub enum BridgeError {
-    SerdeError,
-    Timeout,
-    CallError,
-}
-
-impl std::error::Error for BridgeError {}
-
-impl std::fmt::Display for BridgeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-pub(crate) struct Bridge;
-
-impl Bridge {
-    extern "C" fn callback(res: *const c_char, ctx: *mut c_void) {
-        unsafe { Box::from_raw(ctx as *mut Sender<Option<String>>) }
-            .send(ffi::from(res))
-            .expect("channel is closed, message send failed!");
-    }
-
-    pub(crate) async fn call<Q, S>(ptr: *const c_void, req: &Q) -> Result<Option<S>, BridgeError>
-    where
-        Q: Serialize,
-        S: DeserializeOwned,
-    {
-        let (tx, rx) = channel::<Option<String>>();
-        let req = serde_json::to_string(req)
-            .map_err(|_| BridgeError::SerdeError)?
-            .as_pstr();
-
-        unsafe {
-            page_bridge_call(
-                ptr as _,
-                req.0 as _,
-                Some(Self::callback),
-                Box::into_raw(Box::new(tx)) as *mut c_void,
-            );
-        }
-
-        Ok(
-            if let Some(ret) = timeout(Duration::from_secs(10), rx)
-                .await
-                .map_err(|_| BridgeError::Timeout)?
-                .map_err(|_| BridgeError::CallError)?
-            {
-                Some(serde_json::from_str(&ret).map_err(|_| BridgeError::SerdeError)?)
-            } else {
-                None
-            },
-        )
     }
 }

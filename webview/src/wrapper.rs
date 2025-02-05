@@ -14,11 +14,11 @@ use tokio::sync::{
 };
 
 use webview_sys::{
-    create_page, create_webview, page_exit, page_get_hwnd, page_resize, page_send_ime_composition,
-    page_send_ime_set_composition, page_send_keyboard, page_send_mouse_click,
-    page_send_mouse_click_with_pos, page_send_mouse_move, page_send_mouse_wheel, page_send_touch,
-    page_set_devtools_state, webview_exit, webview_run, Modifiers, PageState, Rect, TouchEventType,
-    TouchPointerType,
+    create_page, create_webview, page_bridge_call, page_exit, page_get_hwnd, page_resize,
+    page_send_ime_composition, page_send_ime_set_composition, page_send_keyboard,
+    page_send_mouse_click, page_send_mouse_click_with_pos, page_send_mouse_move,
+    page_send_mouse_wheel, page_send_touch, page_set_devtools_state, webview_exit, webview_run,
+    Modifiers, PageState, Rect, TouchEventType, TouchPointerType,
 };
 
 use crate::{
@@ -168,6 +168,12 @@ unsafe impl Send for PageWrapper {}
 unsafe impl Sync for PageWrapper {}
 
 impl PageWrapper {
+    extern "C" fn callback(res: *const c_char, ctx: *mut c_void) {
+        unsafe { Box::from_raw(ctx as *mut Sender<Option<String>>) }
+            .send(ffi::from(res))
+            .expect("channel is closed, message send failed!");
+    }
+
     fn new<T>(
         webview: &WebviewWrapper,
         url: &str,
@@ -219,6 +225,19 @@ impl PageWrapper {
         }
 
         (Self { observer, raw }, rx)
+    }
+
+    pub(crate) fn call(&self, req: &str, tx: Sender<Option<String>>) {
+        let req = req.as_pstr();
+
+        unsafe {
+            page_bridge_call(
+                self.raw,
+                req.0 as _,
+                Some(Self::callback),
+                Box::into_raw(Box::new(tx)) as *mut c_void,
+            );
+        }
     }
 
     /// Send a mouse click event to the browser.
