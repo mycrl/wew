@@ -20,14 +20,14 @@
 
 typedef struct
 {
-    char* cache_path;
-    char* browser_subprocess_path;
-    char* scheme_path;
+    const char* cache_path;
+    const char* browser_subprocess_path;
+    const char* scheme_path;
 } WebviewOptions;
 
 typedef struct
 {
-    void* window_handle;
+    const void* window_handle;
     uint32_t frame_rate;
     uint32_t width;
     uint32_t height;
@@ -41,12 +41,6 @@ typedef enum
     kRight,
     kMiddle,
 } MouseButtons;
-
-typedef struct
-{
-    char* success;
-    char* failure;
-} Result;
 
 typedef enum
 {
@@ -92,9 +86,6 @@ typedef struct
 } Rect;
 
 typedef void (*CreateWebviewCallback)(void* ctx);
-typedef void (*BridgeOnCallback)(void* cb_ctx, Result ret);
-typedef void (*BridgeOnHandler)(const char* req, void* ctx, void* cb_ctx, BridgeOnCallback cb);
-typedef void (*BridgeCallCallback)(const char* res, void* ctx);
 
 typedef struct
 {
@@ -103,16 +94,16 @@ typedef struct
     void (*on_frame)(const void* buf, int width, int height, void* ctx);
     void (*on_title_change)(const char* title, void* ctx);
     void (*on_fullscreen_change)(bool fullscreen, void* ctx);
-    void (*on_bridge)(const char* req, void* ctx, void* cb_ctx, BridgeOnCallback cb);
+    void (*on_message)(const char* message, void* ctx);
 } PageObserver;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    EXPORT void execute_sub_process(int argc, char** argv);
+    EXPORT void execute_sub_process(int argc, const char** argv);
 
-    EXPORT void* create_webview(WebviewOptions* settings, CreateWebviewCallback callback, void* ctx);
+    EXPORT void* create_webview(const WebviewOptions* settings, CreateWebviewCallback callback, void* ctx);
 
     //
     // Run the CEF message loop. Use this function instead of an
@@ -120,7 +111,7 @@ extern "C" {
     // and CPU usage. This function will block until a quit message is received by
     // the system.
     //
-    EXPORT int webview_run(void* app, int argc, char** argv);
+    EXPORT int webview_run(void* app, int argc, const char** argv);
 
     //
     // This function should be called on the main application thread to shut down
@@ -130,7 +121,7 @@ extern "C" {
 
     EXPORT void* create_page(void* app,
                              const char* url,
-                             PageOptions* settings,
+                             const PageOptions* settings,
                              PageObserver observer,
                              void* ctx);
 
@@ -186,10 +177,7 @@ extern "C" {
                                 TouchEventType type,
                                 TouchPointerType pointer_type);
 
-    EXPORT void page_bridge_call(void* browser,
-                                 char* req,
-                                 BridgeCallCallback callback,
-                                 void* ctx);
+    EXPORT void page_send_message(void* browser, const char* message);
 
     EXPORT void page_set_devtools_state(void* browser, bool is_open);
 
@@ -197,9 +185,9 @@ extern "C" {
 
     EXPORT const void* page_get_hwnd(void* browser);
 
-    EXPORT void page_send_ime_composition(void* browser, char* input);
+    EXPORT void page_send_ime_composition(void* browser, const char* input);
 
-    EXPORT void page_send_ime_set_composition(void* browser, char* input, int x, int y);
+    EXPORT void page_send_ime_set_composition(void* browser, const char* input, int x, int y);
 
 #ifdef __cplusplus
 }

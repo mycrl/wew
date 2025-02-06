@@ -89,12 +89,10 @@ fn main() -> Result<()> {
         cfgs.file("./cxx/app.cpp")
             .file("./cxx/browser.cpp")
             .file("./cxx/control.cpp")
-            .file("./cxx/bridge.cpp")
             .file("./cxx/render.cpp")
             .file("./cxx/display.cpp")
             .file("./cxx/webview.cpp")
-            .file("./cxx/scheme_handler.cpp")
-            .file("./cxx/message_router.cpp");
+            .file("./cxx/scheme_handler.cpp");
 
         cfgs.include(cef_path);
 

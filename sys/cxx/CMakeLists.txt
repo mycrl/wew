@@ -28,12 +28,8 @@ add_library(webview SHARED
             ./display.h
             ./control.cpp
             ./control.h
-            ./bridge.h
-            ./bridge.cpp
             ./scheme_handler.h
-            ./scheme_handler.cpp
-            ./message_router.h
-            ./message_router.cpp)
+            ./scheme_handler.cpp)
 
 include_directories("${THIRD_PARTY_DIR}/cef")
 target_link_directories(webview PRIVATE

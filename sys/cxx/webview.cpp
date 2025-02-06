@@ -13,7 +13,7 @@ typedef struct
     CefRefPtr<IBrowser> ref;
 } Browser;
 
-CefMainArgs get_main_args(int argc, char** argv)
+CefMainArgs get_main_args(int argc, const char** argv)
 {
 #ifdef WIN32
     CefMainArgs main_args(::GetModuleHandleW(nullptr));
@@ -24,13 +24,13 @@ CefMainArgs get_main_args(int argc, char** argv)
     return main_args;
 }
 
-void execute_sub_process(int argc, char** argv)
+void execute_sub_process(int argc, const char** argv)
 {
     auto main_args = get_main_args(argc, argv);
     CefExecuteProcess(main_args, new IRenderApp, nullptr);
 }
 
-void* create_webview(WebviewOptions* settings, CreateWebviewCallback callback, void* ctx)
+void* create_webview(const WebviewOptions* settings, CreateWebviewCallback callback, void* ctx)
 {
     assert(settings);
     assert(callback);
@@ -40,7 +40,7 @@ void* create_webview(WebviewOptions* settings, CreateWebviewCallback callback, v
     return app;
 }
 
-int webview_run(void* app_ptr, int argc, char** argv)
+int webview_run(void* app_ptr, int argc, const char** argv)
 {
     assert(app_ptr);
 
@@ -75,7 +75,7 @@ void webview_exit(void* app_ptr)
 
 void* create_page(void* app_ptr,
                   const char* url,
-                  PageOptions* settings,
+                  const PageOptions* settings,
                   PageObserver observer,
                   void* ctx)
 {
@@ -164,15 +164,14 @@ void page_send_touch(void* browser,
     page->ref->OnTouch(id, x, y, (cef_touch_event_type_t)type, (cef_pointer_type_t)pointer_type);
 }
 
-void page_bridge_call(void* browser, char* req, BridgeCallCallback callback, void* ctx)
+void page_send_message(void* browser, const char* message)
 {
     assert(browser);
-    assert(req);
-    assert(callback);
+    assert(message);
 
     auto page = (Browser*)browser;
 
-    page->ref->BridgeCall(req, callback, ctx);
+    page->ref->ISendMessage(std::string(message));
 }
 
 void page_set_devtools_state(void* browser, bool is_open)
@@ -203,7 +202,7 @@ const void* page_get_hwnd(void* browser)
     return (void*)hwnd;
 }
 
-void page_send_ime_composition(void* browser, char* input)
+void page_send_ime_composition(void* browser, const char* input)
 {
     assert(browser);
     assert(input);
@@ -213,7 +212,7 @@ void page_send_ime_composition(void* browser, char* input)
     page->ref->OnIMEComposition(std::string(input));
 }
 
-void page_send_ime_set_composition(void* browser, char* input, int x, int y)
+void page_send_ime_set_composition(void* browser, const char* input, int x, int y)
 {
     assert(browser);
     assert(input);

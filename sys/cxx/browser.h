@@ -11,11 +11,9 @@
 
 #include <optional>
 
-#include "bridge.h"
 #include "control.h"
 #include "display.h"
 #include "include/cef_app.h"
-#include "message_router.h"
 #include "render.h"
 #include "webview.h"
 
@@ -25,13 +23,11 @@ class IBrowser : public CefClient,
     public CefLoadHandler,
     public CefLifeSpanHandler,
     public IControl,
-    public IBridgeMaster,
     public IRender,
     public IDisplay
 {
 public:
-    IBrowser(std::shared_ptr<MessageRouter> router,
-             PageOptions settings,
+    IBrowser(PageOptions settings,
              PageObserver observer,
              void* ctx);
 
@@ -107,6 +103,7 @@ public:
     void IClose();
     void SetDevToolsOpenState(bool is_open);
     const void* GetHWND();
+    void ISendMessage(std::string message);
 private:
     std::optional<CefRefPtr<CefBrowser>> _browser = std::nullopt;
 

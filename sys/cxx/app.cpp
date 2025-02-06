@@ -10,7 +10,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "scheme_handler.h"
 
-IApp::IApp(WebviewOptions* settings, CreateWebviewCallback callback, void* ctx)
+IApp::IApp(const WebviewOptions* settings, CreateWebviewCallback callback, void* ctx)
     : _callback(callback), _ctx(ctx)
 {
     assert(settings);
@@ -69,7 +69,7 @@ CefRefPtr<CefClient> IApp::GetDefaultClient()
 }
 
 CefRefPtr<IBrowser> IApp::CreateBrowser(std::string url,
-                                        PageOptions* settings_ptr,
+                                        const PageOptions* settings_ptr,
                                         PageObserver observer,
                                         void* ctx)
 {
@@ -94,12 +94,12 @@ CefRefPtr<IBrowser> IApp::CreateBrowser(std::string url,
         }
         else
         {
-            window_info.SetAsChild((CefWindowHandle)(settings.window_handle), 
+            window_info.SetAsChild((CefWindowHandle)(settings.window_handle),
                                    CefRect(0, 0, settings.width, settings.height));
         }
     }
 
-    CefRefPtr<IBrowser> browser = new IBrowser(router, settings, observer, ctx);
+    CefRefPtr<IBrowser> browser = new IBrowser(settings, observer, ctx);
     CefBrowserHost::CreateBrowser(window_info, browser, url, broswer_settings, nullptr, nullptr);
     return browser;
 }
@@ -117,4 +117,104 @@ CefRefPtr<CefRenderProcessHandler> IRenderApp::GetRenderProcessHandler()
 void IRenderApp::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar)
 {
     registrar->AddCustomScheme(WEBVIEW_SCHEME_NAME, SCHEME_OPT);
+}
+
+void IRenderApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefRefPtr<CefV8Context> context)
+{
+    _send_func->SetBrowser(browser);
+
+    CefRefPtr<CefV8Value> native = CefV8Value::CreateObject(nullptr, nullptr);
+    native->SetValue("send", CefV8Value::CreateFunction("send", _send_func), V8_PROPERTY_ATTRIBUTE_NONE);
+    native->SetValue("on", CefV8Value::CreateFunction("on", _on_func), V8_PROPERTY_ATTRIBUTE_NONE);
+
+    CefRefPtr<CefV8Value> global = context->GetGlobal();
+    global->SetValue("message", std::move(native), V8_PROPERTY_ATTRIBUTE_NONE);
+}
+
+bool IRenderApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                          CefRefPtr<CefFrame> frame,
+                                          CefProcessId source_process,
+                                          CefRefPtr<CefProcessMessage> message)
+{
+    auto args = message->GetArgumentList();
+    std::string payload = args->GetString(0);
+    _on_func->Call(payload);
+    return true;
+}
+
+bool MessageSendFunction::Execute(const CefString& name,
+                                  CefRefPtr<CefV8Value> object,
+                                  const CefV8ValueList& arguments,
+                                  CefRefPtr<CefV8Value>& retval,
+                                  CefString& exception)
+{
+    if (!_browser.has_value())
+    {
+        return false;
+    }
+
+    if (arguments.size() != 1)
+    {
+        return false;
+    }
+
+    if (!arguments[0]->IsString())
+    {
+        return false;
+    }
+
+    CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
+    std::string message = arguments[0]->GetStringValue();
+
+    auto msg = CefProcessMessage::Create("");
+    CefRefPtr<CefListValue> args = msg->GetArgumentList();
+    args->SetSize(1);
+    args->SetString(0, message);
+
+    _browser.value()->GetMainFrame()->SendProcessMessage(PID_BROWSER, msg);
+    retval = CefV8Value::CreateUndefined();
+    return true;
+}
+
+bool MessageOnFunction::Execute(const CefString& name,
+                                CefRefPtr<CefV8Value> object,
+                                const CefV8ValueList& arguments,
+                                CefRefPtr<CefV8Value>& retval,
+                                CefString& exception)
+{
+    if (arguments.size() != 1)
+    {
+        return false;
+    }
+
+    if (!arguments[0]->IsFunction())
+    {
+        return false;
+    }
+
+    _context = std::optional(CefV8Context::GetCurrentContext());
+    _callback = std::optional(arguments[0]);
+    retval = CefV8Value::CreateUndefined();
+    return true;
+}
+
+void MessageOnFunction::Call(std::string message)
+{
+    if (!_context.has_value())
+    {
+        return;
+    }
+
+    if (!_callback.has_value())
+    {
+        return;
+    }
+
+    _context.value()->Enter();
+    CefV8ValueList arguments;
+    arguments.push_back(CefV8Value::CreateString(message));
+    _callback.value()->ExecuteFunction(nullptr, arguments);
+    _context.value()->Exit();
 }

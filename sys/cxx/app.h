@@ -9,19 +9,16 @@
 #define LIBWEBVIEW_APP_H
 #pragma once
 
-#include "bridge.h"
 #include "browser.h"
 #include "include/cef_app.h"
-#include "message_router.h"
 #include "webview.h"
 
 class IApp : public CefApp, public CefBrowserProcessHandler
 {
 public:
-    IApp(WebviewOptions* settings, CreateWebviewCallback callback, void* ctx);
+    IApp(const WebviewOptions* settings, CreateWebviewCallback callback, void* ctx);
     ~IApp()
     {
-        router->IClose();
     }
 
     /* CefApp */
@@ -52,11 +49,9 @@ public:
     CefRefPtr<CefClient> GetDefaultClient() override;
 
     CefRefPtr<IBrowser> CreateBrowser(std::string url,
-                                      PageOptions* settings,
+                                      const PageOptions* settings,
                                       PageObserver observer,
                                       void* ctx);
-
-    std::shared_ptr<MessageRouter> router = std::make_shared<MessageRouter>();
 
     CefSettings cef_settings;
 private:
@@ -67,7 +62,55 @@ private:
     IMPLEMENT_REFCOUNTING(IApp);
 };
 
-class IRenderApp : public CefApp, IBridgeHost
+class MessageSendFunction : public CefV8Handler
+{
+public:
+    MessageSendFunction()
+    {
+    }
+
+    /* CefV8Handler */
+
+    bool Execute(const CefString& name,
+                 CefRefPtr<CefV8Value> object,
+                 const CefV8ValueList& arguments,
+                 CefRefPtr<CefV8Value>& retval,
+                 CefString& exception);
+
+    void SetBrowser(CefRefPtr<CefBrowser> browser)
+    {
+        _browser = std::optional(browser);
+    }
+private:
+    std::optional<CefRefPtr<CefBrowser>> _browser = std::nullopt;
+
+    IMPLEMENT_REFCOUNTING(MessageSendFunction);
+};
+
+class MessageOnFunction : public CefV8Handler
+{
+public:
+    MessageOnFunction()
+    {
+    }
+
+    /* CefV8Handler */
+
+    bool Execute(const CefString& name,
+                 CefRefPtr<CefV8Value> object,
+                 const CefV8ValueList& arguments,
+                 CefRefPtr<CefV8Value>& retval,
+                 CefString& exception);
+
+    void Call(std::string message);
+private:
+    std::optional<CefRefPtr<CefV8Context>> _context = std::nullopt;
+    std::optional<CefRefPtr<CefV8Value>> _callback = std::nullopt;
+
+    IMPLEMENT_REFCOUNTING(MessageOnFunction);
+};
+
+class IRenderApp : public CefApp, public CefRenderProcessHandler
 {
 public:
     /* CefApp */
@@ -80,7 +123,20 @@ public:
     ///
     CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override;
 
+    /* CefRenderProcessHandler */
+
+    void OnContextCreated(CefRefPtr<CefBrowser> browser,
+                          CefRefPtr<CefFrame> frame,
+                          CefRefPtr<CefV8Context> context);
+    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefProcessId source_process,
+                                  CefRefPtr<CefProcessMessage> message);
+
 private:
+    CefRefPtr<MessageSendFunction> _send_func = new MessageSendFunction();
+    CefRefPtr<MessageOnFunction> _on_func = new MessageOnFunction();
+
     IMPLEMENT_REFCOUNTING(IRenderApp);
 };
 

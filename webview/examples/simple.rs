@@ -5,7 +5,6 @@ use std::{
 };
 
 use minifb::{MouseButton, MouseMode, Window, WindowOptions};
-use tokio::runtime::Runtime;
 use webview::{
     execute_subprocess, is_subprocess, ActionState, MouseAction, MouseButtons, Observer,
     PageOptions, Position, Webview, WebviewOptions,
@@ -21,14 +20,13 @@ impl Observer for PageObserver {
     }
 }
 
-async fn run_cef() -> anyhow::Result<()> {
+fn run_cef() -> anyhow::Result<()> {
     let (sender, receiver) = channel();
     let app = Webview::new(&WebviewOptions {
         cache_path: None,
         browser_subprocess_path: None,
         scheme_path: None,
-    })
-    .await?;
+    })?;
 
     let settings = PageOptions {
         frame_rate: 30,
@@ -39,11 +37,8 @@ async fn run_cef() -> anyhow::Result<()> {
         window_handle: None,
     };
 
-    let browser = app
-        .create_page("https://google.com", &settings, PageObserver { sender })
-        .await?;
-
-    tokio::spawn(async move {
+    let browser = app.create_page("https://google.com", &settings, PageObserver { sender })?;
+    thread::spawn(move || {
         let mut window = Window::new(
             "simple",
             settings.width as usize,
@@ -89,7 +84,7 @@ async fn run_cef() -> anyhow::Result<()> {
         Ok::<(), anyhow::Error>(())
     });
 
-    app.wait_exit().await;
+    app.wait_exit()?;
     Ok(())
 }
 
@@ -98,6 +93,6 @@ fn main() -> anyhow::Result<()> {
         execute_subprocess();
     }
 
-    Runtime::new()?.block_on(async { run_cef().await })?;
+    run_cef()?;
     Ok(())
 }

@@ -12,14 +12,12 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
-IBrowser::IBrowser(std::shared_ptr<MessageRouter> router,
-                   PageOptions settings,
+IBrowser::IBrowser(PageOptions settings,
                    PageObserver observer,
                    void* ctx)
     : _settings(settings)
     , _observer(observer)
     , _ctx(ctx)
-    , IBridgeMaster(router)
     , IRender(settings, observer, ctx)
     , IDisplay(settings, observer, ctx)
 {
@@ -162,7 +160,6 @@ void IBrowser::OnAfterCreated(CefRefPtr<CefBrowser> browser)
 
     IRender::SetBrowser(browser);
     IControl::SetBrowser(browser);
-    IBridgeMaster::SetBrowser(browser);
     _browser = browser;
 }
 
@@ -240,8 +237,39 @@ bool IBrowser::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                         CefProcessId source_process,
                                         CefRefPtr<CefProcessMessage> message)
 {
-    BridgeMasterOnMessage(message);
+    if (_is_closed)
+    {
+        return false;
+    }
+
+    if (!_browser.has_value())
+    {
+        return false;
+    }
+
+    auto args = message->GetArgumentList();
+    std::string payload = args->GetString(0);
+    _observer.on_message(payload.c_str(), _ctx);
     return true;
+}
+
+void IBrowser::ISendMessage(std::string message)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    auto msg = CefProcessMessage::Create("");
+    CefRefPtr<CefListValue> args = msg->GetArgumentList();
+    args->SetSize(1);
+    args->SetString(0, message);
+    _browser.value()->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
 }
 
 void IBrowser::IClose()
@@ -259,7 +287,6 @@ void IBrowser::IClose()
     IRender::IClose();
     IDisplay::IClose();
     IControl::IClose();
-    IBridgeMaster::IClose();
     _browser.value()->GetHost()->CloseBrowser(true);
 
     _browser = std::nullopt;
