@@ -251,7 +251,7 @@ void IControl::OnKeyboard(int scan_code, bool pressed, Modifiers modifiers)
 #ifdef WIN32
     auto windows_key_code = MapVirtualKeyA(scan_code, MAPVK_VSC_TO_VK);
     bool is_capslock_on = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
-#else
+#elif LINUX
     bool is_capslock_on = false;
     if (_display)
     {
@@ -260,6 +260,8 @@ void IControl::OnKeyboard(int scan_code, bool pressed, Modifiers modifiers)
         is_capslock_on = state.led_mask & (1 << 1);
         XCloseDisplay(_display);
     }
+#else
+    bool is_capslock_on = false;
 #endif
 
     bool is_az = IS_ABC(scan_code);                   // a-z

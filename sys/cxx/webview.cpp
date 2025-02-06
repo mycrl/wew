@@ -17,8 +17,8 @@ CefMainArgs get_main_args(int argc, const char** argv)
 {
 #ifdef WIN32
     CefMainArgs main_args(::GetModuleHandleW(nullptr));
-#elif LINUX
-    CefMainArgs main_args(argc, argv);
+#else
+    CefMainArgs main_args(argc, (char**)argv);
 #endif
 
     return main_args;

@@ -19,7 +19,7 @@
 
 #ifdef WIN32
 #include "windows.h"
-#elif LINUX
+#else
 #include <sys/stat.h>
 #endif
 

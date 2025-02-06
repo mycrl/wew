@@ -44,9 +44,16 @@ fn main() -> Result<()> {
             exec("Expand-Archive -Path cef.zip -DestinationPath ./", &out_dir)?;
             exec("Remove-Item ./cef.zip", &out_dir)?;
         }
+
+        #[cfg(target_os = "macos")]
+        {
+            exec("wget https://github.com/mycrl/webview-rs/releases/download/distributions/cef-macos.zip -O ./cef.zip", &out_dir)?;
+            exec("tar -xf ./cef.zip -C ./", &out_dir)?;
+            exec("rm -f ./cef.zip", &out_dir)?;
+        }
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "macos"))]
     {
         if !is_exsit(&join(cef_path, "./libcef_dll_wrapper")) {
             exec("cmake -DCMAKE_BUILD_TYPE=Release .", cef_path)?;
@@ -118,19 +125,10 @@ fn main() -> Result<()> {
         #[cfg(target_os = "linux")]
         cfgs.define("LINUX", Some("1")).define("CEF_X11", Some("1"));
 
+        #[cfg(target_os = "macos")]
+        cfgs.define("MACOS", Some("1"));
+
         cfgs.compile("sys");
-
-        println!("cargo:rustc-link-lib=static=sys");
-        println!("cargo:rustc-link-search=all={}", &out_dir);
-        println!(
-            "cargo:rustc-link-search=all={}",
-            join(cef_path, "./Release")
-        );
-
-        println!(
-            "cargo:rustc-link-search=all={}",
-            join(cef_path, "./libcef_dll_wrapper/Release")
-        );
 
         #[cfg(target_os = "windows")]
         {
@@ -147,6 +145,24 @@ fn main() -> Result<()> {
             println!("cargo:rustc-link-lib=cef_dll_wrapper");
             println!("cargo:rustc-link-lib=X11");
         }
+
+        #[cfg(target_os = "macos")]
+        {
+            println!("cargo:rustc-link-lib=framework=Chromium Embedded Framework");
+        }
+
+        println!("cargo:rustc-link-lib=static=sys");
+        println!("cargo:rustc-link-search=all={}", &out_dir);
+        println!(
+            "cargo:rustc-link-search=all={}",
+            join(cef_path, "./Release")
+        );
+
+        #[cfg(not(target_os = "macos"))]
+        println!(
+            "cargo:rustc-link-search=all={}",
+            join(cef_path, "./libcef_dll_wrapper/Release")
+        );
     }
 
     Ok(())
