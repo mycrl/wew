@@ -168,7 +168,7 @@ bool MessageSendFunction::Execute(const CefString& name,
     CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
     std::string message = arguments[0]->GetStringValue();
 
-    auto msg = CefProcessMessage::Create("");
+    auto msg = CefProcessMessage::Create("MESSAGE_TRANSPORT");
     CefRefPtr<CefListValue> args = msg->GetArgumentList();
     args->SetSize(1);
     args->SetString(0, message);

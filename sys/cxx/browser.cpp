@@ -265,7 +265,7 @@ void IBrowser::ISendMessage(std::string message)
         return;
     }
 
-    auto msg = CefProcessMessage::Create("");
+    auto msg = CefProcessMessage::Create("MESSAGE_TRANSPORT");
     CefRefPtr<CefListValue> args = msg->GetArgumentList();
     args->SetSize(1);
     args->SetString(0, message);
