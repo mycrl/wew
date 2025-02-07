@@ -130,7 +130,7 @@ void IRenderApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
     native->SetValue("on", CefV8Value::CreateFunction("on", _on_func), V8_PROPERTY_ATTRIBUTE_NONE);
 
     CefRefPtr<CefV8Value> global = context->GetGlobal();
-    global->SetValue("message", std::move(native), V8_PROPERTY_ATTRIBUTE_NONE);
+    global->SetValue("MessageTransport", std::move(native), V8_PROPERTY_ATTRIBUTE_NONE);
 }
 
 bool IRenderApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
