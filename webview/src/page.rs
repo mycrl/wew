@@ -21,6 +21,19 @@ pub struct PageOptions {
 unsafe impl Send for PageOptions {}
 unsafe impl Sync for PageOptions {}
 
+impl Default for PageOptions {
+    fn default() -> Self {
+        Self {
+            window_handle: None,
+            frame_rate: 30,
+            width: 800,
+            height: 600,
+            device_scale_factor: 1.0,
+            is_offscreen: false,
+        }
+    }
+}
+
 /// CefClient
 ///
 /// The CefClient interface provides access to browser-instance-specific
