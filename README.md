@@ -165,23 +165,23 @@ Info.plist:
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-	<dict>
-		<key>CFBundleName</key>
-		<string>Kyle</string>
-		<key>CFBundleDisplayName</key>
-		<string>Kyle</string>
-		<key>CFBundleIdentifier</key>
-		<string>com.example.kyle</string>
-		<key>CFBundleVersion</key>
-		<string>1.0.0</string>
-		<key>CFBundleShortVersionString</key>
-		<string>1.0</string>
-		<key>CFBundlePackageType</key>
-		<string>APPL</string>
-		<key>CFBundleExecutable</key>
-		<string>Kyle</string>
-		<key>LSMinimumSystemVersion</key>
-		<string>15.4</string>
+    <dict>
+        <key>CFBundleName</key>
+        <string>Kyle</string>
+        <key>CFBundleDisplayName</key>
+        <string>Kyle</string>
+        <key>CFBundleIdentifier</key>
+        <string>com.example.kyle</string>
+        <key>CFBundleVersion</key>
+        <string>1.0.0</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.0</string>
+        <key>CFBundlePackageType</key>
+        <string>APPL</string>
+        <key>CFBundleExecutable</key>
+        <string>Kyle</string>
+        <key>LSMinimumSystemVersion</key>
+        <string>15.4</string>
 	</dict>
 </plist>
 ```
