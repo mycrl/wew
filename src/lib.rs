@@ -236,6 +236,11 @@ impl Runtime {
     /// Execute subprocess
     ///
     /// This function is used to execute subprocesses.
+    /// 
+    /// ### Please be careful! 
+    /// 
+    /// Do not call this function in an asynchronous runtime, such as tokio, 
+    /// which can lead to unexpected crashes!
     pub fn execute_subprocess() -> bool {
         let args = Args::default();
 
@@ -262,8 +267,8 @@ impl Runtime {
             windowless_rendering_enabled: attr.windowless_rendering_enabled,
             main_bundle_path: attr.main_bundle_path.as_raw(),
             framework_dir_path: attr.framework_dir_path.as_raw(),
-            // Only macOS doesn't support multi-threaded message loops. 
-            // To shield users from these details, we specifically enable the 
+            // Only macOS doesn't support multi-threaded message loops.
+            // To shield users from these details, we specifically enable the
             // message pump driver approach for macOS.
             external_message_pump: cfg!(target_os = "macos"),
             multi_threaded_message_loop: !cfg!(target_os = "macos"),
@@ -338,7 +343,7 @@ impl Runtime {
 
 impl Drop for Runtime {
     fn drop(&mut self) {
-        // On macOS, the multi-threaded message loop is not supported, so we 
+        // On macOS, the multi-threaded message loop is not supported, so we
         // don't need to quit it.
         if !cfg!(target_os = "macos") {
             unsafe {
@@ -372,7 +377,7 @@ pub trait RuntimeExtMacos {
     /// Quit the message loop on macOS
     ///
     /// This function is used to quit the message loop on macOS.
-    /// 
+    ///
     /// Calling this function will cause `block_run` to exit and return.
     fn quit();
 }
@@ -506,9 +511,9 @@ pub struct WebViewAttributesBuilder(WebViewAttributes);
 
 impl WebViewAttributesBuilder {
     /// Set the window handle
-    /// 
+    ///
     /// In windowed mode, setting the window handle will set the browser as a child view.
-    /// 
+    ///
     /// In windowless mode, setting the window handle is used to identify monitor information and as a parent view
     /// for dialog boxes, context menus, and other elements. If not provided, the main screen monitor will be used,
     /// and some features that require a parent view may not work properly.

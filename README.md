@@ -137,9 +137,29 @@ CEF's runtime requires a bunch of resource files and dynamic libraries on Window
 
 #### Windows
 
-Let's start with the simplest method. This library will automatically compile resource files, so you can find the built resource files in the `./target/debug/build/webview-xxx/out/cef/Release` directory.
+Let's start with the simplest method. This library will automatically compile resource files, so you can find the built resource files in the `./target/debug/build/webview-xxx/out/cef` directory.
 
-Assuming cargo's build directory is `/bar/target/debug/build/webview-4b6671582a188858/out/cef/Release`, and your executable file is at `/foo/webview-example.exe`, copy all files from the `/Release` and `/Resources` directories inside `/bar/target/debug/build/webview-4b6671582a188858/out/cef/Release` to the `/foo` directory, placing them together with `webview-example.exe`, but exclude static libraries `.lib` and debug files `.pdb`.
+Assuming cargo's build directory is `/bar/target/debug/build/webview-4b6671582a188858/out/cef`, and your executable file is at `/foo/webview-example.exe`, copy all files from the `/Release` and `/Resources` directories inside `/bar/target/debug/build/webview-4b6671582a188858/out/cef` to the `/foo` directory, placing them together with `webview-example.exe`, but exclude static libraries `.lib` and debug files `.pdb`.
+
+```text
+webview-example.exe
+chrome_elf.dll
+d3dcompiler_47.dll
+dxcompiler.dll
+dxil.dll
+libcef.dll
+libEGL.dll
+libGLESv2.dll
+v8_context_snapshot.bin
+vk_swiftshader_icd.json
+vk_swiftshader.dll
+vulkan-1.dll
+locales
+chrome_100_percent.pak
+chrome_200_percent.pak
+icudtl.dat
+resources.pak
+```
 
 #### MacOS
 
@@ -219,17 +239,9 @@ Info.plist:
 
 You need to create `Helper (GPU)`, `Helper (Plugin)`, `Helper (Renderer)`, and `Helper` simultaneously. The executable files in these several Helpers are all the same, you just need to change the filename to match the `.app` name. The `Info.plist` also needs to be modified according to the actual situation.
 
-#### Manual Compilation
+#### Manual Download
 
-Of course, you can also download CEF's pre-built files and compile them yourself. Go to `https://cef-builds.spotifycdn.com/index.html` to download the pre-built files of version `cef_binary_137.0.17+gf354b0e+chromium-137.0.7151.104`, then use cmake to compile them.
-
-```bash
-cd cef
-cmake -DCMAKE_BUILD_TYPE=Release .
-cmake --build . --config Release
-```
-
-Use cmake to compile the Release product in the root directory of the extracted folder.
+Of course, you can also download the CEF's preset files and work with them on your own, rather than looking them up from the cargo target dir. Go to `https://cef-builds.spotifycdn.com/index.html` to download the pre-built files of version `cef_binary_137.0.17+gf354b0e+chromium-137.0.7151.104`.
 
 ## Communication with Web Pages
 

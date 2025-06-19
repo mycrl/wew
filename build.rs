@@ -93,16 +93,38 @@ fn main() -> Result<()> {
 
         #[cfg(target_os = "windows")]
         {
+            if !is_exsit(&join(&out_dir, "./7za.exe")) {
+                exec(
+                    "Invoke-WebRequest -Uri 'https://7-zip.org/a/7za920.zip' -OutFile ./7za.zip",
+                    &out_dir,
+                )?;
+
+                exec(
+                    "Expand-Archive -Path ./7za.zip -DestinationPath ./7za",
+                    &out_dir,
+                )?;
+
+                exec("Move-Item ./7za/7za.exe ./7za.exe", &out_dir)?;
+                exec("Remove-Item -Recurse -Force ./7za", &out_dir)?;
+                exec("Remove-Item ./7za.zip", &out_dir)?;
+            }
+
             exec(
                 &format!(
-                    "Invoke-WebRequest -Uri {URL}/cef-windows-{}.zip -OutFile ./cef.zip",
-                    env::var("CARGO_CFG_TARGET_ARCH")?
+                    "Invoke-WebRequest -Uri {} -OutFile ./cef.tar.bz2",
+                    get_binary_url(),
                 ),
                 &out_dir,
             )?;
 
-            exec("Expand-Archive -Path cef.zip -DestinationPath ./", &out_dir)?;
-            exec("Remove-Item ./cef.zip", &out_dir)?;
+            exec("./7za.exe x ./cef.tar.bz2", &out_dir)?;
+            exec("./7za.exe x ./cef.tar", &out_dir)?;
+            exec("Remove-Item ./cef.tar.bz2", &out_dir)?;
+            exec("Remove-Item ./cef.tar", &out_dir)?;
+            exec(
+                &format!("Rename-Item ./{} ./cef", get_binary_name()),
+                &out_dir,
+            )?;
         }
     }
 
