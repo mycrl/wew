@@ -182,7 +182,7 @@ Info.plist:
         <string>Kyle</string>
         <key>LSMinimumSystemVersion</key>
         <string>15.4</string>
-	</dict>
+    </dict>
 </plist>
 ```
 
