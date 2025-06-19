@@ -234,7 +234,3 @@ Use cmake to compile the Release product in the root directory of the extracted 
 ## License
 
 [MIT](./LICENSE) Copyright (c) 2025 Mr.Panda.
-
-```
-
-```
