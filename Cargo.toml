@@ -1,6 +1,17 @@
-[workspace]
-resolver = "2"
-members = [
-    "webview", 
-    "sys",
-]
+[package]
+name = "webview"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+raw-window-handle = "0.6.2"
+log = "0.4.27"
+
+[dev-dependencies]
+anyhow = "1"
+minifb = "0.28.0"
+
+[build-dependencies]
+anyhow = "1"
+bindgen = "0.72.0"
+cc = { version = "1.2.27", features = ["parallel"] }

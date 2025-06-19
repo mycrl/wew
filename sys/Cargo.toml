@@ -1,9 +1,0 @@
-[package]
-name = "webview-sys"
-version = "0.1.0"
-edition = "2021"
-
-[build-dependencies]
-anyhow = "1"
-cc = { version = "1.0.79", features = ["parallel"] }
-bindgen = { version = "0.70", default-features = false, features = ["runtime"] }
