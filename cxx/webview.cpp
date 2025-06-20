@@ -428,7 +428,7 @@ void IWebView::OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
     }
 
     auto first = character_bounds[0];
-    _handler.on_ime_rect((Rect *)&first, _handler.context);
+    _handler.on_ime_rect(first, _handler.context);
 }
 
 void IWebView::GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect)

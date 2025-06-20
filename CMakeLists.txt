@@ -3,9 +3,6 @@ project(webview)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-
-# TODO: Doing so may prevent some dependencies from being built 
-# or installed correctly, so use with caution.
 set(CMAKE_SUPPRESS_REGENERATION true)
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY true)
 
@@ -16,17 +13,17 @@ endif()
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
 add_library(webview SHARED
-            ./library.h
-            ./webview.cpp
-            ./webview.h
-            ./runtime.cpp
-            ./runtime.h
-            ./subprocess.h
-            ./subprocess.cpp
-            ./util.cpp
-            ./util.h
-            ./request_handler.h
-            ./request_handler.cpp)
+            ./cxx/library.h
+            ./cxx/webview.cpp
+            ./cxx/webview.h
+            ./cxx/runtime.cpp
+            ./cxx/runtime.h
+            ./cxx/subprocess.h
+            ./cxx/subprocess.cpp
+            ./cxx/util.cpp
+            ./cxx/util.h
+            ./cxx/request_handler.h
+            ./cxx/request_handler.cpp)
 
 include_directories("${THIRD_PARTY_DIR}/cef")
 target_link_directories(webview PRIVATE

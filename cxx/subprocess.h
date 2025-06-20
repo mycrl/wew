@@ -9,6 +9,8 @@
 #define subprocess_h
 #pragma once
 
+#include <optional>
+
 #include "include/cef_app.h"
 
 class MessageSender : public CefV8Handler

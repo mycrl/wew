@@ -218,6 +218,7 @@ fn main() -> Result<()> {
             .prepend_enum_name(false)
             .derive_eq(true)
             .size_t_is_usize(true)
+            .clang_arg(format!("-I{}", cef_path))
             .header("./cxx/library.h")
             .generate()?
             .write_to_file(&join(&out_dir, "bindings.rs"))?;
