@@ -1,8 +1,8 @@
-use std::thread;
-
 use anyhow::Result;
 use webview::{
-    Runtime, RuntimeAttributesBuilder, RuntimeHandler, WebViewAttributes, WebViewHandler,
+    MainThreadRuntime, NativeWindowWebView, execute_subprocess, is_subprocess,
+    runtime::{RuntimeAttributesBuilder, RuntimeHandler},
+    webview::{WebViewAttributes, WebViewHandler},
 };
 
 struct WebViewObserver;
@@ -14,12 +14,11 @@ struct RuntimeObserver;
 impl RuntimeHandler for RuntimeObserver {}
 
 fn main() -> Result<()> {
-    if Runtime::is_subprocess() {
-        Runtime::execute_subprocess();
-        return Ok(());
+    if is_subprocess() {
+        execute_subprocess();
     }
 
-    let runtime = RuntimeAttributesBuilder::default()
+    let runtime = RuntimeAttributesBuilder::<MainThreadRuntime, NativeWindowWebView>::default()
         .build()
         .create_runtime(RuntimeObserver)?;
 
@@ -29,9 +28,10 @@ fn main() -> Result<()> {
         WebViewObserver,
     )?;
 
-    thread::park();
+    runtime.block_run();
 
     drop(webview);
     drop(runtime);
+
     Ok(())
 }

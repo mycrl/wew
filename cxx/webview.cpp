@@ -2,217 +2,636 @@
 //  webview.cpp
 //  webview
 //
-//  Created by Mr.Panda on 2023/4/26.
+//  Created by mycrl on 2025/6/19.
 //
 
 #include "webview.h"
-#include "app.h"
+#include "request_handler.h"
 
-#ifdef MACOS
-#include "include/wrapper/cef_library_loader.h"
-#endif
-
-typedef struct
+void close_webview(void *webview_ptr)
 {
-    CefRefPtr<IPage> ref;
-} Page;
+    assert(webview_ptr != nullptr);
 
-CefMainArgs get_main_args(int argc, const char** argv)
-{
-#ifdef WIN32
-    CefMainArgs main_args(::GetModuleHandleW(nullptr));
-#else
-    CefMainArgs main_args(argc, const_cast<char**>(argv));
-#endif
-    
-    return main_args;
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->Close();
+    delete webview;
 }
 
-void run_message_loop()
+void webview_mouse_click(void *webview_ptr, cef_mouse_event_t event, cef_mouse_button_type_t button, bool pressed)
 {
-    CefRunMessageLoop();
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->OnMouseClick(event, button, pressed);
 }
 
-void quit_message_loop()
+void webview_mouse_wheel(void *webview_ptr, cef_mouse_event_t event, int x, int y)
 {
-    CefQuitMessageLoop();
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->OnMouseWheel(event, x, y);
 }
 
-void poll_message_loop()
+void webview_mouse_move(void *webview_ptr, cef_mouse_event_t event)
 {
-    CefDoMessageLoopWork();
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->OnMouseMove(event);
 }
 
-int execute_subprocess(int argc, const char** argv)
+void webview_keyboard(void *webview_ptr, cef_key_event_t event)
 {
-#ifdef MACOS
-    CefScopedLibraryLoader library_loader;
-    if (!library_loader.LoadInHelper())
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->OnKeyboard(event);
+}
+
+void webview_touch(void *webview_ptr, cef_touch_event_t event)
+{
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->OnTouch(event);
+}
+
+void webview_ime_composition(void *webview_ptr, const char *input)
+{
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->OnIMEComposition(input);
+}
+
+void webview_ime_set_composition(void *webview_ptr, const char *input, int x, int y)
+{
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->OnIMESetComposition(input, x, y);
+}
+
+void webview_send_message(void *webview_ptr, const char *message)
+{
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->SendMessage(std::string(message));
+}
+
+void webview_set_devtools_state(void *webview_ptr, bool is_open)
+{
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->SetDevToolsOpenState(is_open);
+}
+
+void webview_resize(void *webview_ptr, int width, int height)
+{
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->Resize(width, height);
+}
+
+const void *webview_get_window_handle(void *webview_ptr)
+{
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    return webview->ref->GetWindowHandle();
+}
+
+void webview_set_request_handler(void *webview_ptr, ResourceRequestHandler *handler)
+{
+    assert(webview_ptr != nullptr);
+
+    auto webview = static_cast<WebView *>(webview_ptr);
+    webview->ref->SetRequestHandler(handler);
+}
+
+// clang-format off
+IWebView::IWebView(CefSettings &cef_settings, 
+                   const WebViewSettings *settings, 
+                   WebViewHandler handler)
+    : _cef_settings(cef_settings)
+    , _handler(handler)
+{
+    _view_rect.width = settings->width;
+    _view_rect.height = settings->height;
+    _device_scale_factor = settings->device_scale_factor;
+}
+// clang-format on
+
+IWebView::~IWebView()
+{
+    this->Close();
+}
+
+CefRefPtr<CefDragHandler> IWebView::GetDragHandler()
+{
+    return this;
+}
+
+void IWebView::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                                   CefRefPtr<CefFrame> frame,
+                                   CefRefPtr<CefContextMenuParams> params,
+                                   CefRefPtr<CefMenuModel> model)
+{
+    if (params->GetTypeFlags() & (CM_TYPEFLAG_SELECTION | CM_TYPEFLAG_EDITABLE))
     {
-        return -1;
+        return;
     }
-#endif
-    auto main_args = get_main_args(argc, argv);
-    return CefExecuteProcess(main_args, new IRenderApp, nullptr);
+
+    model->Clear();
 }
 
-void* create_app(const AppOptions* settings, AppObserver observer, void* ctx)
+CefRefPtr<CefContextMenuHandler> IWebView::GetContextMenuHandler()
 {
-#ifdef MACOS
-    CefScopedLibraryLoader library_loader;
-    if (!library_loader.LoadInMain())
+    return this;
+}
+
+bool IWebView::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                    CefRefPtr<CefFrame> frame,
+                                    CefRefPtr<CefContextMenuParams> params,
+                                    int command_id,
+                                    EventFlags event_flags)
+{
+    return false;
+};
+
+CefRefPtr<CefDisplayHandler> IWebView::GetDisplayHandler()
+{
+    if (_is_closed)
     {
         return nullptr;
     }
-#endif
-    
-    assert(settings != nullptr);
-    
-    App* app = new App {new IApp(settings, observer, ctx)};
-    return app;
+
+    return this;
 }
 
-void execute_app(void* ptr, int argc, const char** argv) {
-    assert(ptr != nullptr);
-    
-    auto app = static_cast<App*>(ptr);
-    auto main_args = get_main_args(argc, argv);
-    CefExecuteProcess(main_args, app->ref, nullptr);
-    CefInitialize(main_args, app->ref->cef_settings, app->ref, nullptr);
-}
-
-void close_app(void* ptr)
+CefRefPtr<CefLifeSpanHandler> IWebView::GetLifeSpanHandler()
 {
-    assert(ptr != nullptr);
-    
-    CefShutdown();
-    
-    delete static_cast<App*>(ptr);
+    if (_is_closed)
+    {
+        return nullptr;
+    }
+
+    return this;
 }
 
-void* create_page(void* ptr,
-                  const char* url,
-                  const PageOptions* settings,
-                  PageObserver observer,
-                  void* ctx)
+CefRefPtr<CefLoadHandler> IWebView::GetLoadHandler()
 {
-    assert(ptr != nullptr);
-    assert(settings != nullptr);
-    
-    Page* page = new Page{static_cast<App*>(ptr)->ref->CreatePage(std::string(url),
-                                                                  settings,
-                                                                  observer,
-                                                                  ctx)};
-    return page;
+    if (_is_closed)
+    {
+        return nullptr;
+    }
+
+    return this;
 }
 
-void close_page(void* ptr)
+CefRefPtr<CefRenderHandler> IWebView::GetRenderHandler()
 {
-    assert(ptr != nullptr);
-    
-    auto page = static_cast<Page*>(ptr);
-    page->ref->IClose();
-    delete page;
+    if (_cef_settings.windowless_rendering_enabled)
+    {
+        return this;
+    }
+    else
+    {
+        return nullptr;
+    }
 }
 
-void page_send_mouse_click(void* ptr, MouseButtons button, bool pressed)
+CefRefPtr<CefRequestHandler> IWebView::GetRequestHandler()
 {
-    assert(ptr != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->OnMouseClick(button, pressed);
+    if (_is_closed)
+    {
+        return nullptr;
+    }
+
+    if (_request_handler == nullptr)
+    {
+        return nullptr;
+    }
+
+    return this;
 }
 
-void page_send_mouse_click_with_pos(void* ptr,
-                                    MouseButtons button,
-                                    bool pressed,
-                                    int x,
-                                    int y)
+void IWebView::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type)
 {
-    assert(ptr != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->OnMouseClickWithPosition(button, x, y, pressed);
+    if (_is_closed)
+    {
+        return;
+    }
+
+    _handler.on_state_change(WebViewState::BeforeLoad, _handler.context);
 }
 
-void page_send_mouse_wheel(void* ptr, int x, int y)
+void IWebView::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode)
 {
-    assert(ptr != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->OnMouseWheel(x, y);
+    if (_is_closed)
+    {
+        return;
+    }
+
+    _handler.on_state_change(WebViewState::Loaded, _handler.context);
 }
 
-void page_send_mouse_move(void* ptr, int x, int y)
+void IWebView::OnLoadError(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           ErrorCode error_code,
+                           const CefString &error_text,
+                           const CefString &failed_url)
 {
-    assert(ptr != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->OnMouseMove(x, y);
+    if (_is_closed)
+    {
+        return;
+    }
+
+    _handler.on_state_change(WebViewState::LoadError, _handler.context);
+
+    if (error_code == ERR_ABORTED)
+    {
+        return;
+    }
 }
 
-void page_send_keyboard(void* ptr, int scan_code, bool pressed, Modifiers modifiers)
+void IWebView::OnAfterCreated(CefRefPtr<CefBrowser> browser)
 {
-    assert(ptr != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->OnKeyboard(scan_code, pressed, modifiers);
+    if (_is_closed)
+    {
+        return;
+    }
+
+    browser->GetHost()->WasResized();
+    _browser = browser;
 }
 
-void page_send_touch(void* ptr,
-                     int id,
-                     int x,
-                     int y,
-                     TouchEventType type,
-                     TouchPointerType pointer_type)
+bool IWebView::DoClose(CefRefPtr<CefBrowser> browser)
 {
-    assert(ptr != nullptr);
-    
-    // TouchEventType have the same value with cef_touch_event_type_t.
-    // Same as TouchPointerType.
-    static_cast<Page*>(ptr)->ref->OnTouch(id,
-                                          x,
-                                          y,
-                                          static_cast<cef_touch_event_type_t>(type),
-                                          static_cast<cef_pointer_type_t>(pointer_type));
+    _handler.on_state_change(WebViewState::RequestClose, _handler.context);
+
+    return false;
 }
 
-void page_send_message(void* ptr, const char* message)
+bool IWebView::OnBeforePopup(CefRefPtr<CefBrowser> browser,
+                             CefRefPtr<CefFrame> frame,
+                             int popup_id,
+                             const CefString &target_url,
+                             const CefString &target_frame_name,
+                             CefLifeSpanHandler::WindowOpenDisposition target_disposition,
+                             bool user_gesture,
+                             const CefPopupFeatures &popupFeatures,
+                             CefWindowInfo &windowInfo,
+                             CefRefPtr<CefClient> &client,
+                             CefBrowserSettings &settings,
+                             CefRefPtr<CefDictionaryValue> &extra_info,
+                             bool *no_javascript_access)
 {
-    assert(ptr != nullptr);
-    assert(message != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->ISendMessage(std::string(message));
+    browser->GetMainFrame()->LoadURL(target_url);
+
+    return true;
 }
 
-void page_set_devtools_state(void* ptr, bool is_open)
+bool IWebView::OnDragEnter(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefDragData> dragData,
+                           CefDragHandler::DragOperationsMask mask)
 {
-    assert(ptr != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->SetDevToolsOpenState(is_open);
+    return true;
 }
 
-void page_resize(void* ptr, int width, int height)
+void IWebView::OnBeforeClose(CefRefPtr<CefBrowser> browser)
 {
-    assert(ptr != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->Resize(width, height);
+    _handler.on_state_change(WebViewState::Close, _handler.context);
+    _browser = std::nullopt;
 }
 
-const void* page_get_hwnd(void* ptr)
+void IWebView::SetDevToolsOpenState(bool is_open)
 {
-    assert(ptr != nullptr);
-    
-    return static_cast<Page*>(ptr)->ref->GetWindowHandle();
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    if (is_open)
+    {
+        _browser.value()->GetHost()->ShowDevTools(CefWindowInfo(), nullptr, CefBrowserSettings(), CefPoint());
+    }
+    else
+    {
+        _browser.value()->GetHost()->CloseDevTools();
+    }
 }
 
-void page_send_ime_composition(void* ptr, const char* input)
+const void *IWebView::GetWindowHandle()
 {
-    assert(ptr != nullptr);
-    assert(input != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->OnIMEComposition(std::string(input));
+    return _browser.has_value() ? _browser.value()->GetHost()->GetWindowHandle() : nullptr;
 }
 
-void page_send_ime_set_composition(void* ptr, const char* input, int x, int y)
+bool IWebView::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                        CefRefPtr<CefFrame> frame,
+                                        CefProcessId source_process,
+                                        CefRefPtr<CefProcessMessage> message)
 {
-    assert(ptr != nullptr);
-    assert(input != nullptr);
-    
-    static_cast<Page*>(ptr)->ref->OnIMESetComposition(std::string(input), x, y);
+    if (_is_closed)
+    {
+        return false;
+    }
+
+    if (!_browser.has_value())
+    {
+        return false;
+    }
+
+    auto args = message->GetArgumentList();
+    std::string payload = args->GetString(0);
+    _handler.on_message(payload.c_str(), _handler.context);
+    return true;
+}
+
+void IWebView::SendMessage(std::string message)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    auto msg = CefProcessMessage::Create("MESSAGE_TRANSPORT");
+    CefRefPtr<CefListValue> args = msg->GetArgumentList();
+    args->SetSize(1);
+    args->SetString(0, message);
+    _browser.value()->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
+}
+
+void IWebView::Close()
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _browser.value()->GetHost()->CloseBrowser(true);
+    _browser = std::nullopt;
+    _is_closed = true;
+}
+
+void IWebView::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString &title)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    _handler.on_title_change(title.ToString().c_str(), _handler.context);
+};
+
+void IWebView::OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    _handler.on_fullscreen_change(fullscreen, _handler.context);
+};
+
+void IWebView::OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
+                                            const CefRange &selected_range,
+                                            const RectList &character_bounds)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (character_bounds.size() == 0)
+    {
+        return;
+    }
+
+    auto first = character_bounds[0];
+    _handler.on_ime_rect((Rect *)&first, _handler.context);
+}
+
+void IWebView::GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    rect.width = _view_rect.width;
+    rect.height = _view_rect.height;
+}
+
+void IWebView::OnPaint(CefRefPtr<CefBrowser> browser,
+                       PaintElementType type,
+                       const RectList &dirtyRects,
+                       const void *buffer, // BGRA32
+                       int width,
+                       int height)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (buffer == nullptr)
+    {
+        return;
+    }
+
+    _handler.on_frame(buffer, width, height, _handler.context);
+}
+
+bool IWebView::GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo &info)
+{
+    if (_is_closed)
+    {
+        return false;
+    }
+
+    info.device_scale_factor = _device_scale_factor;
+
+    return false;
+}
+
+void IWebView::OnIMEComposition(std::string input)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _browser.value()->GetHost()->ImeCommitText(input, CefRange::InvalidRange(), 0);
+}
+
+void IWebView::OnIMESetComposition(std::string input, int x, int y)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    CefCompositionUnderline line;
+    line.style = CEF_CUS_DASH;
+    line.range = CefRange(0, y);
+
+    _browser.value()->GetHost()->ImeSetComposition(input, {line}, CefRange::InvalidRange(), CefRange(x, y));
+}
+void IWebView::OnMouseClick(cef_mouse_event_t event, cef_mouse_button_type_t button, bool pressed)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _browser.value()->GetHost()->SendMouseClickEvent(event, button, !pressed, 1);
+}
+
+void IWebView::OnMouseMove(cef_mouse_event_t event)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _browser.value()->GetHost()->SendMouseMoveEvent(event, false);
+}
+
+void IWebView::OnMouseWheel(cef_mouse_event_t event, int x, int y)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _browser.value()->GetHost()->SendMouseWheelEvent(event, x, y);
+}
+
+void IWebView::OnKeyboard(cef_key_event_t event)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _browser.value()->GetHost()->SendKeyEvent(event);
+}
+
+void IWebView::OnTouch(cef_touch_event_t event)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _browser.value()->GetHost()->SendTouchEvent(event);
+}
+
+void IWebView::Resize(int width, int height)
+{
+    if (_is_closed)
+    {
+        return;
+    }
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _view_rect.width = width;
+    _view_rect.height = height;
+    _browser.value()->GetHost()->WasResized();
+}
+
+void IWebView::SetRequestHandler(ResourceRequestHandler *handler)
+{
+    _request_handler = handler;
+}
+
+CefRefPtr<CefResourceRequestHandler> IWebView::GetResourceRequestHandler(CefRefPtr<CefBrowser> browser,
+                                                                         CefRefPtr<CefFrame> frame,
+                                                                         CefRefPtr<CefRequest> req,
+                                                                         bool is_navigation,
+                                                                         bool is_download,
+                                                                         const CefString &request_initiator,
+                                                                         bool &disable_default_handling)
+{
+    if (_is_closed)
+    {
+        return nullptr;
+    }
+
+    if (_request_handler == nullptr)
+    {
+        return nullptr;
+    }
+
+    ResourceRequest request;
+    request.url = req->GetURL().ToString().c_str();
+    request.method = req->GetMethod().ToString().c_str();
+    request.referrer = req->GetReferrerURL().ToString().c_str();
+
+    auto handler = _request_handler->create_resource_handler(&request, _handler.context);
+    if (handler == nullptr)
+    {
+        return nullptr;
+    }
+
+    return new IRequestHandler(_request_handler, handler);
 }

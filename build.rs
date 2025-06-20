@@ -1,4 +1,9 @@
-use std::{env, fs, path::Path, process::Command};
+use std::{
+    env,
+    fs::{self, read_dir},
+    path::Path,
+    process::Command,
+};
 
 use anyhow::{Result, anyhow};
 
@@ -76,7 +81,7 @@ fn main() -> Result<()> {
         {
             exec(
                 &format!(
-                    "curl -L --retry 5 --retry-delay 2 --retry-connrefused -o ./cef.tar.bz2 \"{}\"",
+                    "curl -L --retry 10 --retry-delay 3 --retry-connrefused --retry-max-time 300 -o ./cef.tar.bz2 \"{}\"",
                     get_binary_url(),
                 ),
                 &out_dir,
@@ -161,14 +166,17 @@ fn main() -> Result<()> {
             } else {
                 "-std=c++20"
             })
-            .file("./cxx/app.cpp")
-            .file("./cxx/page.cpp")
-            .file("./cxx/control.cpp")
-            .file("./cxx/render.cpp")
-            .file("./cxx/display.cpp")
-            .file("./cxx/webview.cpp")
-            .file("./cxx/scheme_handler.cpp")
             .include(cef_path);
+
+        for item in read_dir("./cxx")? {
+            if let Ok(item) = item {
+                if let Some(name) = item.file_name().to_str() {
+                    if name.ends_with(".cpp") {
+                        compiler.file(format!("./cxx/{}", name));
+                    }
+                }
+            }
+        }
 
         #[cfg(target_os = "windows")]
         compiler
@@ -210,7 +218,7 @@ fn main() -> Result<()> {
             .prepend_enum_name(false)
             .derive_eq(true)
             .size_t_is_usize(true)
-            .header("./cxx/webview.h")
+            .header("./cxx/library.h")
             .generate()?
             .write_to_file(&join(&out_dir, "bindings.rs"))?;
     }
