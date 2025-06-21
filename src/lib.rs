@@ -1,5 +1,5 @@
-pub mod request_handler;
 pub mod runtime;
+pub mod scheme;
 pub mod webview;
 
 use std::{
@@ -15,13 +15,14 @@ use std::{
     non_camel_case_types,
     non_upper_case_globals
 )]
-pub mod sys {
+mod sys {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
 /// A pointer type that is assumed to be thread-safe.
 ///
-/// The creator of this type must ensure that the pointer implementation is thread-safe.
+/// The creator of this type must ensure that the pointer implementation is
+/// thread-safe.
 struct ThreadSafePointer<T>(*mut T);
 
 unsafe impl<T> Send for ThreadSafePointer<T> {}
@@ -131,20 +132,21 @@ impl WebViewAbstract for NativeWindowWebView {}
 ///
 /// Do not call this function in an asynchronous runtime, such as tokio,
 /// which can lead to unexpected crashes!
-pub fn execute_subprocess() -> ! {
+pub fn execute_subprocess() -> bool {
     let args = Args::default();
-    unsafe {
-        sys::execute_subprocess(args.size() as _, args.as_ptr() as _);
-    }
 
-    unreachable!("execute_subprocess failed")
+    (unsafe { sys::execute_subprocess(args.size() as _, args.as_ptr() as _) }) == 0
 }
 
 /// Check if current process is a subprocess
 ///
 /// This function is used to check if the current process is a subprocess.
 ///
-/// Note that if the current process is a subprocess, it will block until the subprocess exits.
+/// Note that if the current process is a subprocess, it will block until the
+/// subprocess exits.
 pub fn is_subprocess() -> bool {
+    // This check is not very strict, but processes with a "type" parameter can
+    // generally be considered subprocesses, unless the main process also uses
+    // this parameter.
     args().find(|it| it.contains("--type")).is_some()
 }

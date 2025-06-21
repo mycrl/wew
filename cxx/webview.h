@@ -22,8 +22,7 @@ class IWebView : public CefClient,
                  public CefLoadHandler,
                  public CefLifeSpanHandler,
                  public CefDisplayHandler,
-                 public CefRenderHandler,
-                 public CefRequestHandler
+                 public CefRenderHandler
 {
   public:
     IWebView(CefSettings &cef_settings, const WebViewSettings *settings, WebViewHandler handler);
@@ -90,11 +89,6 @@ class IWebView : public CefClient,
     /// Return the handler for off-screen rendering events.
     ///
     virtual CefRefPtr<CefRenderHandler> GetRenderHandler() override;
-
-    ///
-    /// Return the handler for browser request events.
-    ///
-    virtual CefRefPtr<CefRequestHandler> GetRequestHandler() override;
 
     ///
     /// Called when a new message is received from a different process. Return
@@ -296,19 +290,6 @@ class IWebView : public CefClient,
                          int width,
                          int height) override;
 
-    /* CefRequestHandler */
-
-    ///
-    /// Called on the browser process IO thread before a resource request is initiated.
-    ///
-    virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser> browser,
-                                                                           CefRefPtr<CefFrame> frame,
-                                                                           CefRefPtr<CefRequest> request,
-                                                                           bool is_navigation,
-                                                                           bool is_download,
-                                                                           const CefString &request_initiator,
-                                                                           bool &disable_default_handling) override;
-
     void Close();
     void Resize(int width, int height);
     void SetDevToolsOpenState(bool is_open);
@@ -321,11 +302,9 @@ class IWebView : public CefClient,
     void OnTouch(cef_touch_event_t event);
     void OnIMEComposition(std::string input);
     void OnIMESetComposition(std::string input, int x, int y);
-    void SetRequestHandler(ResourceRequestHandler *handler);
 
   private:
-    std::optional<CefRefPtr<CefBrowser>> _browser = std::nullopt;
-    ResourceRequestHandler *_request_handler = nullptr;
+    std::optional<CefRefPtr<CefBrowser>> _browser;
     bool _is_closed = false;
 
     cef_rect_t _view_rect;

@@ -6,7 +6,6 @@
 //
 
 #include "webview.h"
-#include "request_handler.h"
 
 void close_webview(void *webview_ptr)
 {
@@ -105,14 +104,6 @@ const void *webview_get_window_handle(void *webview_ptr)
     return webview->ref->GetWindowHandle();
 }
 
-void webview_set_request_handler(void *webview_ptr, ResourceRequestHandler *handler)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->SetRequestHandler(handler);
-}
-
 // clang-format off
 IWebView::IWebView(CefSettings &cef_settings, 
                    const WebViewSettings *settings, 
@@ -203,21 +194,6 @@ CefRefPtr<CefRenderHandler> IWebView::GetRenderHandler()
     {
         return nullptr;
     }
-}
-
-CefRefPtr<CefRequestHandler> IWebView::GetRequestHandler()
-{
-    if (_is_closed)
-    {
-        return nullptr;
-    }
-
-    if (_request_handler == nullptr)
-    {
-        return nullptr;
-    }
-
-    return this;
 }
 
 void IWebView::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type)
@@ -400,7 +376,8 @@ void IWebView::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString &tit
         return;
     }
 
-    _handler.on_title_change(title.ToString().c_str(), _handler.context);
+    std::string value = title.ToString();
+    _handler.on_title_change(value.c_str(), _handler.context);
 };
 
 void IWebView::OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen)
@@ -597,41 +574,4 @@ void IWebView::Resize(int width, int height)
     _view_rect.width = width;
     _view_rect.height = height;
     _browser.value()->GetHost()->WasResized();
-}
-
-void IWebView::SetRequestHandler(ResourceRequestHandler *handler)
-{
-    _request_handler = handler;
-}
-
-CefRefPtr<CefResourceRequestHandler> IWebView::GetResourceRequestHandler(CefRefPtr<CefBrowser> browser,
-                                                                         CefRefPtr<CefFrame> frame,
-                                                                         CefRefPtr<CefRequest> req,
-                                                                         bool is_navigation,
-                                                                         bool is_download,
-                                                                         const CefString &request_initiator,
-                                                                         bool &disable_default_handling)
-{
-    if (_is_closed)
-    {
-        return nullptr;
-    }
-
-    if (_request_handler == nullptr)
-    {
-        return nullptr;
-    }
-
-    ResourceRequest request;
-    request.url = req->GetURL().ToString().c_str();
-    request.method = req->GetMethod().ToString().c_str();
-    request.referrer = req->GetReferrerURL().ToString().c_str();
-
-    auto handler = _request_handler->create_resource_handler(&request, _handler.context);
-    if (handler == nullptr)
-    {
-        return nullptr;
-    }
-
-    return new IRequestHandler(_request_handler, handler);
 }

@@ -32,6 +32,18 @@ CefRefPtr<CefRenderProcessHandler> ISubProcess::GetRenderProcessHandler()
     return this;
 }
 
+void ISubProcess::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar)
+{
+    auto cmd = CefCommandLine::GetGlobalCommandLine();
+    if (cmd->HasSwitch("custom-scheme-name"))
+    {
+        auto name = cmd->GetSwitchValue("custom-scheme-name");
+    }
+
+    registrar->AddCustomScheme(
+        "webview", CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_CORS_ENABLED | CEF_SCHEME_OPTION_FETCH_ENABLED);
+}
+
 void ISubProcess::OnContextCreated(CefRefPtr<CefBrowser> browser,
                                    CefRefPtr<CefFrame> frame,
                                    CefRefPtr<CefV8Context> context)
@@ -40,10 +52,10 @@ void ISubProcess::OnContextCreated(CefRefPtr<CefBrowser> browser,
 
     CefRefPtr<CefV8Value> native = CefV8Value::CreateObject(nullptr, nullptr);
     native->SetValue("send", CefV8Value::CreateFunction("send", _sender), V8_PROPERTY_ATTRIBUTE_NONE);
-    native->SetValue("recv", CefV8Value::CreateFunction("recv", _receiver), V8_PROPERTY_ATTRIBUTE_NONE);
+    native->SetValue("on", CefV8Value::CreateFunction("on", _receiver), V8_PROPERTY_ATTRIBUTE_NONE);
 
     CefRefPtr<CefV8Value> global = context->GetGlobal();
-    global->SetValue("WebViewMessageChannel", std::move(native), V8_PROPERTY_ATTRIBUTE_NONE);
+    global->SetValue("MessageTransport", std::move(native), V8_PROPERTY_ATTRIBUTE_NONE);
 }
 
 bool ISubProcess::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,

@@ -2,6 +2,7 @@ use std::{
     ffi::{CString, c_void},
     marker::PhantomData,
     ops::Deref,
+    ptr::null,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -9,9 +10,13 @@ use std::{
     thread,
 };
 
+use parking_lot::Mutex;
+
 use crate::{
     Args, CStringExt, Error, MainThreadRuntime, MessagePumpRuntime, MultiThreadRuntime,
-    NativeWindowWebView, ThreadSafePointer, WindowlessRenderWebView, sys,
+    NativeWindowWebView, ThreadSafePointer, WindowlessRenderWebView,
+    scheme::CustomSchemeAttributes,
+    sys,
     webview::{
         MixWebviewHnadler, WebView, WebViewAttributes, WebViewHandler,
         WindowlessRenderWebViewHandler,
@@ -20,20 +25,27 @@ use crate::{
 
 /// Runtime configuration attributes
 #[derive(Default)]
-pub struct RuntimeAttributes<R, W> {
+pub struct RuntimeAttributes<'a, R, W> {
     _r: PhantomData<R>,
     _w: PhantomData<W>,
 
+    /// Custom scheme handler
+    ///
+    /// This is used to handle custom scheme requests.
+    custom_scheme: Option<CustomSchemeAttributes<'a>>,
+
     /// Whether to enable windowless rendering mode
     ///
-    /// Do not enable this value if the application does not use windowless rendering as it may reduce
-    /// rendering performance on some systems.
+    /// Do not enable this value if the application does not use windowless
+    /// rendering as it may reduce rendering performance on some systems.
     windowless_rendering_enabled: bool,
 
-    /// The directory where data for the global browser cache will be stored on disk
+    /// The directory where data for the global browser cache will be stored on
+    /// disk
     cache_dir_path: Option<CString>,
 
-    /// The path to a separate executable that will be launched for sub-processes
+    /// The path to a separate executable that will be launched for
+    /// sub-processes
     ///
     /// This executable will be launched to handle sub-processes.
     browser_subprocess_path: Option<CString>,
@@ -41,28 +53,31 @@ pub struct RuntimeAttributes<R, W> {
     /// The path to the CEF framework directory on macOS
     ///
     /// If this value is empty, the framework must exist at
-    /// "Contents/Frameworks/Chromium Embedded Framework.framework" in the top-level app bundle.
-    /// If this value is non-empty, it must be an absolute path. Also configurable using the
-    /// "framework-dir-path" command-line switch.
+    /// "Contents/Frameworks/Chromium Embedded Framework.framework" in the
+    /// top-level app bundle. If this value is non-empty, it must be an
+    /// absolute path. Also configurable using the "framework-dir-path"
+    /// command-line switch.
     framework_dir_path: Option<CString>,
 
     /// The path to the main bundle on macOS
     ///
-    /// If this value is empty, the main bundle must exist at "Contents/MacOS/main" in the top-level app bundle.
-    /// If this value is non-empty, it must be an absolute path. Also configurable using the
+    /// If this value is empty, the main bundle must exist at
+    /// "Contents/MacOS/main" in the top-level app bundle. If this value is
+    /// non-empty, it must be an absolute path. Also configurable using the
     /// "main-bundle-path" command-line switch.
     main_bundle_path: Option<CString>,
 
     /// Whether to use external message pump
     ///
-    /// If this value is true, the application must implement the message pump driver.
+    /// If this value is true, the application must implement the message pump
+    /// driver.
     external_message_pump: bool,
 
     /// Whether to use multi-threaded message loop
     multi_threaded_message_loop: bool,
 }
 
-impl<W> RuntimeAttributes<MainThreadRuntime, W> {
+impl<'a, W> RuntimeAttributes<'a, MainThreadRuntime, W> {
     pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MainThreadRuntime, W>, Error>
     where
         T: RuntimeHandler + 'static,
@@ -71,7 +86,7 @@ impl<W> RuntimeAttributes<MainThreadRuntime, W> {
     }
 }
 
-impl<W> RuntimeAttributes<MultiThreadRuntime, W> {
+impl<'a, W> RuntimeAttributes<'a, MultiThreadRuntime, W> {
     pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MultiThreadRuntime, W>, Error>
     where
         T: RuntimeHandler + 'static,
@@ -80,7 +95,7 @@ impl<W> RuntimeAttributes<MultiThreadRuntime, W> {
     }
 }
 
-impl<W> RuntimeAttributes<MessagePumpRuntime, W> {
+impl<'a, W> RuntimeAttributes<'a, MessagePumpRuntime, W> {
     pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MessagePumpRuntime, W>, Error>
     where
         T: MessagePumpRuntimeHandler + 'static,
@@ -93,16 +108,26 @@ impl<W> RuntimeAttributes<MessagePumpRuntime, W> {
 }
 
 #[derive(Default)]
-pub struct RuntimeAttributesBuilder<R, W>(RuntimeAttributes<R, W>);
+pub struct RuntimeAttributesBuilder<'a, R, W>(RuntimeAttributes<'a, R, W>);
 
-impl<R, W> RuntimeAttributesBuilder<R, W> {
-    /// Set the directory where data for the global browser cache will be stored on disk
+impl<'a, R, W> RuntimeAttributesBuilder<'a, R, W> {
+    /// Set the custom scheme handler
+    ///
+    /// This is used to handle custom scheme requests.
+    pub fn with_custom_scheme(mut self, scheme: CustomSchemeAttributes<'a>) -> Self {
+        self.0.custom_scheme = Some(scheme);
+        self
+    }
+
+    /// Set the directory where data for the global browser cache will be stored
+    /// on disk
     pub fn with_cache_dir_path(mut self, value: &str) -> Self {
         self.0.cache_dir_path = Some(CString::new(value).unwrap());
         self
     }
 
-    /// Set the path to a separate executable that will be launched for sub-processes
+    /// Set the path to a separate executable that will be launched for
+    /// sub-processes
     ///
     /// This executable will be launched to handle sub-processes.
     pub fn with_browser_subprocess_path(mut self, value: &str) -> Self {
@@ -113,9 +138,10 @@ impl<R, W> RuntimeAttributesBuilder<R, W> {
     /// Set the path to the CEF framework directory on macOS
     ///
     /// If this value is empty, the framework must exist at
-    /// "Contents/Frameworks/Chromium Embedded Framework.framework" in the top-level app bundle.
-    /// If this value is non-empty, it must be an absolute path. Also configurable using the
-    /// "framework-dir-path" command-line switch.
+    /// "Contents/Frameworks/Chromium Embedded Framework.framework" in the
+    /// top-level app bundle. If this value is non-empty, it must be an
+    /// absolute path. Also configurable using the "framework-dir-path"
+    /// command-line switch.
     pub fn with_framework_dir_path(mut self, value: &str) -> Self {
         self.0.framework_dir_path = Some(CString::new(value).unwrap());
         self
@@ -123,8 +149,9 @@ impl<R, W> RuntimeAttributesBuilder<R, W> {
 
     /// Set the path to the main bundle on macOS
     ///
-    /// If this value is empty, the main bundle must exist at "Contents/MacOS/main" in the top-level app bundle.
-    /// If this value is non-empty, it must be an absolute path. Also configurable using the
+    /// If this value is empty, the main bundle must exist at
+    /// "Contents/MacOS/main" in the top-level app bundle. If this value is
+    /// non-empty, it must be an absolute path. Also configurable using the
     /// "main-bundle-path" command-line switch.
     pub fn with_main_bundle_path(mut self, value: &str) -> Self {
         self.0.main_bundle_path = Some(CString::new(value).unwrap());
@@ -132,32 +159,32 @@ impl<R, W> RuntimeAttributesBuilder<R, W> {
     }
 }
 
-impl<W> RuntimeAttributesBuilder<MultiThreadRuntime, W> {
-    pub fn build(mut self) -> RuntimeAttributes<MultiThreadRuntime, W> {
+impl<'a, W> RuntimeAttributesBuilder<'a, MultiThreadRuntime, W> {
+    pub fn build(mut self) -> RuntimeAttributes<'a, MultiThreadRuntime, W> {
         self.0.multi_threaded_message_loop = true;
         self.0.external_message_pump = false;
         self.0
     }
 }
 
-impl<W> RuntimeAttributesBuilder<MainThreadRuntime, W> {
-    pub fn build(mut self) -> RuntimeAttributes<MainThreadRuntime, W> {
+impl<'a, W> RuntimeAttributesBuilder<'a, MainThreadRuntime, W> {
+    pub fn build(mut self) -> RuntimeAttributes<'a, MainThreadRuntime, W> {
         self.0.multi_threaded_message_loop = false;
         self.0.external_message_pump = false;
         self.0
     }
 }
 
-impl<W> RuntimeAttributesBuilder<MessagePumpRuntime, W> {
-    pub fn build(mut self) -> RuntimeAttributes<MessagePumpRuntime, W> {
-        self.0.multi_threaded_message_loop = true;
+impl<'a, W> RuntimeAttributesBuilder<'a, MessagePumpRuntime, W> {
+    pub fn build(mut self) -> RuntimeAttributes<'a, MessagePumpRuntime, W> {
+        self.0.multi_threaded_message_loop = false;
         self.0.external_message_pump = true;
         self.0
     }
 }
 
-impl<R, W> Deref for RuntimeAttributesBuilder<R, W> {
-    type Target = RuntimeAttributes<R, W>;
+impl<'a, R, W> Deref for RuntimeAttributesBuilder<'a, R, W> {
+    type Target = RuntimeAttributes<'a, R, W>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -169,6 +196,10 @@ pub trait RuntimeHandler: Send + Sync {
     /// Called when the context is initialized
     ///
     /// This callback is called when the application's context is initialized.
+    ///
+    /// Note that initialization only begins when the message loop starts
+    /// running, so you need to drive the message loop as soon as possible after
+    /// creating the runtime.
     fn on_context_initialized(&self) {}
 }
 
@@ -189,18 +220,31 @@ pub struct Runtime<R, W> {
     _r: PhantomData<R>,
     _w: PhantomData<W>,
     handler: ThreadSafePointer<MixRuntimeHnadler>,
-    raw: Arc<ThreadSafePointer<c_void>>,
+    raw: Mutex<Arc<ThreadSafePointer<c_void>>>,
+    multi_threaded_message_loop: bool,
 }
 
 impl<R, W> Runtime<R, W> {
     fn new(attr: &RuntimeAttributes<R, W>, handler: MixRuntimeHnadler) -> Result<Self, Error> {
+        // Only one runtime is allowed per process, mainly because the runtime is bound
+        // to the message loop.
         if RUNTIME_RUNNING.load(Ordering::Relaxed) {
             return Err(Error::RuntimeAlreadyExists);
         } else {
             RUNTIME_RUNNING.store(true, Ordering::Relaxed);
         }
 
-        let mut options = sys::RuntimeSettings {
+        let custom_scheme = if let Some(attr) = attr.custom_scheme.as_ref() {
+            Some(sys::CustomSchemeAttributes {
+                name: attr.name.as_c_str().as_ptr(),
+                domain: attr.domain.as_c_str().as_ptr(),
+                factory: attr.handler.as_raw(),
+            })
+        } else {
+            None
+        };
+
+        let options = sys::RuntimeSettings {
             cache_dir_path: attr.cache_dir_path.as_raw(),
             browser_subprocess_path: attr.browser_subprocess_path.as_raw(),
             windowless_rendering_enabled: attr.windowless_rendering_enabled,
@@ -208,12 +252,16 @@ impl<R, W> Runtime<R, W> {
             framework_dir_path: attr.framework_dir_path.as_raw(),
             external_message_pump: attr.external_message_pump,
             multi_threaded_message_loop: attr.multi_threaded_message_loop,
+            custom_scheme: custom_scheme
+                .as_ref()
+                .map(|it| it as *const _)
+                .unwrap_or_else(|| null()),
         };
 
         let handler: *mut MixRuntimeHnadler = Box::into_raw(Box::new(handler));
         let ptr = unsafe {
             sys::create_runtime(
-                &mut options,
+                &options,
                 sys::RuntimeHandler {
                     on_context_initialized: Some(on_context_initialized),
                     on_schedule_message_pump_work: Some(on_schedule_message_pump_work),
@@ -231,6 +279,8 @@ impl<R, W> Runtime<R, W> {
         {
             let args = Args::default();
 
+            // If using multi-threaded message loop, run the message loop in a separate
+            // thread.
             if attr.multi_threaded_message_loop {
                 let raw = raw.clone();
                 thread::spawn(move || unsafe {
@@ -246,8 +296,9 @@ impl<R, W> Runtime<R, W> {
         Ok(Self {
             _r: PhantomData::default(),
             _w: PhantomData::default(),
+            multi_threaded_message_loop: attr.multi_threaded_message_loop,
             handler: ThreadSafePointer(handler),
-            raw,
+            raw: Mutex::new(raw),
         })
     }
 }
@@ -263,7 +314,7 @@ impl<R> Runtime<R, WindowlessRenderWebView> {
         T: WindowlessRenderWebViewHandler + 'static,
     {
         WebView::new(
-            &self.raw,
+            &self.raw.lock(),
             url,
             attr,
             MixWebviewHnadler::WindowlessRenderWebViewHandler(Box::new(handler)),
@@ -282,7 +333,7 @@ impl<R> Runtime<R, NativeWindowWebView> {
         T: WebViewHandler + 'static,
     {
         WebView::new(
-            &self.raw,
+            &self.raw.lock(),
             url,
             attr,
             MixWebviewHnadler::WebViewHandler(Box::new(handler)),
@@ -292,16 +343,15 @@ impl<R> Runtime<R, NativeWindowWebView> {
 
 impl<R, W> Drop for Runtime<R, W> {
     fn drop(&mut self) {
-        // On macOS, the multi-threaded message loop is not supported, so we
-        // don't need to quit it.
-        if !cfg!(target_os = "macos") {
+        // If using multi-threaded message loop, quit the message loop.
+        if self.multi_threaded_message_loop {
             unsafe {
                 sys::quit_message_loop();
             }
         }
 
         unsafe {
-            sys::close_runtime(self.raw.as_ptr());
+            sys::close_runtime(self.raw.lock().as_ptr());
         }
 
         drop(unsafe { Box::from_raw(self.handler.as_ptr()) });
@@ -315,7 +365,8 @@ impl<W> Runtime<MessagePumpRuntime, W> {
     ///
     /// This function is used to poll the message loop on main thread.
     ///
-    /// Note that this function won't block the current thread, external code needs to drive the message loop pump.
+    /// Note that this function won't block the current thread, external code
+    /// needs to drive the message loop pump.
     pub fn poll(&self) {
         unsafe { sys::poll_message_loop() }
     }
@@ -326,7 +377,8 @@ impl<W> Runtime<MainThreadRuntime, W> {
     ///
     /// This function is used to run the message loop on main thread.
     ///
-    /// Note that this function will block the current thread until the message loop ends.
+    /// Note that this function will block the current thread until the message
+    /// loop ends.
     pub fn block_run(&self) {
         unsafe { sys::run_message_loop() }
     }

@@ -5,7 +5,9 @@ edition = "2024"
 
 [dependencies]
 raw-window-handle = "0.6.2"
-log = "0.4.27"
+parking_lot = "0.12"
+url = "2.5.4"
+mime_guess = "2.0.5"
 
 [dev-dependencies]
 anyhow = "1"

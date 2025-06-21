@@ -9,20 +9,26 @@
 #define runtime_h
 #pragma once
 
+#include <optional>
+#include <string>
+
 #include "include/cef_app.h"
 
 #include "library.h"
+#include "scheme.h"
 #include "webview.h"
 
 class IRuntime : public CefApp, public CefBrowserProcessHandler
 {
   public:
-    IRuntime(CefSettings cef_settings, RuntimeHandler handler);
+    IRuntime(const RuntimeSettings *settings, CefSettings cef_settings, RuntimeHandler handler);
     ~IRuntime()
     {
     }
 
     /* CefApp */
+
+    virtual void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
 
     ///
     /// Return the handler for functionality specific to the browser process. This
@@ -82,8 +88,9 @@ class IRuntime : public CefApp, public CefBrowserProcessHandler
     CefSettings &GetCefSettings();
 
   private:
-    RuntimeHandler _handler;
+    std::optional<ICustomSchemeAttributes> _custom_scheme;
     CefSettings _cef_settings;
+    RuntimeHandler _handler;
 
     IMPLEMENT_REFCOUNTING(IRuntime);
 };

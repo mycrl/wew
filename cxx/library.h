@@ -23,6 +23,47 @@
 
 typedef struct
 {
+    const char *url;
+    const char *method;
+    const char *referrer;
+} Request;
+
+typedef struct
+{
+    int status_code;
+    uint64_t content_length;
+    char *mime_type;
+} Response;
+
+typedef struct
+{
+    bool (*open)(void *context);
+    bool (*skip)(size_t size, int *cursor, void *context);
+    bool (*read)(uint8_t *buffer, size_t size, int *cursor, void *context);
+    void (*get_response)(Response *response, void *context);
+    void (*cancel)(void *context);
+    void (*destroy)(void *context);
+    void *context;
+} RequestHandler;
+
+typedef struct
+{
+    RequestHandler *(*request)(Request *request, void *context);
+    void (*destroy_request_handler)(RequestHandler *handler);
+    void *context;
+} SchemeHandlerFactory;
+
+typedef struct
+{
+    const char *name;
+    const char *domain;
+    const SchemeHandlerFactory *factory;
+} CustomSchemeAttributes;
+
+typedef struct
+{
+    const CustomSchemeAttributes *custom_scheme;
+
     /// The directory where data for the global browser cache will be stored on disk.
     const char *cache_dir_path;
 
@@ -104,12 +145,6 @@ typedef enum
     Close = 5,
 } WebViewState;
 
-typedef cef_mouse_event_t MouseEvent;
-
-typedef cef_touch_event_t TouchEvent;
-
-typedef cef_key_event_t KeyEvent;
-
 typedef struct
 {
     void (*on_state_change)(WebViewState state, void *context);
@@ -120,38 +155,6 @@ typedef struct
     void (*on_message)(const char *message, void *context);
     void *context;
 } WebViewHandler;
-
-typedef struct
-{
-    const char *url;
-    const char *method;
-    const char *referrer;
-} ResourceRequest;
-
-typedef struct
-{
-    int status_code;
-    uint64_t content_length;
-    const char *mime_type;
-} ResourceResponse;
-
-typedef struct
-{
-    bool (*open)(void *context);
-    bool (*skip)(size_t size, size_t *cursor, void *context);
-    bool (*read)(void *buffer, size_t size, size_t *cursor, void *context);
-    void (*get_response)(ResourceResponse *response, void *context);
-    void (*cancel)(void *context);
-    void (*destroy)(void *context);
-    void *context;
-} ResourceHandler;
-
-typedef struct
-{
-    ResourceHandler *(*create_resource_handler)(ResourceRequest *request, void *context);
-    void (*destroy_resource_handler)(ResourceHandler *handler);
-    void *context;
-} ResourceRequestHandler;
 
 #ifdef __cplusplus
 extern "C"
@@ -187,7 +190,10 @@ extern "C"
     //
     // Send a mouse click event to the browser.
     //
-    EXPORT void webview_mouse_click(void *webview_ptr, cef_mouse_event_t event, cef_mouse_button_type_t button, bool pressed);
+    EXPORT void webview_mouse_click(void *webview_ptr,
+                                    cef_mouse_event_t event,
+                                    cef_mouse_button_type_t button,
+                                    bool pressed);
 
     //
     // Send a mouse wheel event to the browser. The |x| and |y| coordinates are
@@ -226,8 +232,6 @@ extern "C"
     EXPORT void webview_resize(void *webview_ptr, int width, int height);
 
     EXPORT const void *webview_get_window_handle(void *webview_ptr);
-
-    EXPORT void webview_set_request_handler(void *webview_ptr, ResourceRequestHandler *handler);
 
 #ifdef __cplusplus
 }

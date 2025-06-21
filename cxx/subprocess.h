@@ -70,6 +70,8 @@ class ISubProcess : public CefApp, public CefRenderProcessHandler
   public:
     /* CefApp */
 
+    virtual void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
+
     ///
     /// Return the handler for functionality specific to the render process. This
     /// method is called on the render process main thread.

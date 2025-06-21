@@ -10,6 +10,7 @@
 #endif
 
 #include "runtime.h"
+#include "scheme.h"
 #include "util.h"
 
 void run_message_loop()
@@ -73,7 +74,7 @@ void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler)
     }
 #endif
 
-    Runtime *runtime = new Runtime{new IRuntime(cef_settings, handler)};
+    Runtime *runtime = new Runtime{new IRuntime(settings, cef_settings, handler)};
     return runtime;
 }
 
@@ -109,10 +110,20 @@ void *create_webview(void *runtime_ptr, const char *url, const WebViewSettings *
 }
 
 // clang-format off
-IRuntime::IRuntime(CefSettings cef_settings, RuntimeHandler handler)
+IRuntime::IRuntime(const RuntimeSettings *settings, CefSettings cef_settings, RuntimeHandler handler)
     : _handler(handler)
     , _cef_settings(cef_settings)
 {
+    if (settings->custom_scheme != nullptr)
+    {
+        assert(settings->custom_scheme->factory != nullptr);
+
+        _custom_scheme = ICustomSchemeAttributes{
+            .name = std::string(settings->custom_scheme->name),
+            .domain = std::string(settings->custom_scheme->domain),
+            .factory = settings->custom_scheme->factory,
+        };
+    }
 }
 // clang-format on
 
@@ -121,13 +132,36 @@ CefRefPtr<CefBrowserProcessHandler> IRuntime::GetBrowserProcessHandler()
     return this;
 }
 
+void IRuntime::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar)
+{
+    if (_custom_scheme.has_value())
+    {
+        registrar->AddCustomScheme(_custom_scheme.value().name,
+                                   CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_SECURE |
+                                       CEF_SCHEME_OPTION_CORS_ENABLED | CEF_SCHEME_OPTION_FETCH_ENABLED);
+    }
+}
+
 void IRuntime::OnBeforeCommandLineProcessing(const CefString &process_type, CefRefPtr<CefCommandLine> command_line)
 {
     command_line->AppendSwitch("use-mock-keychain");
+
+    if (_custom_scheme.has_value())
+    {
+        command_line->AppendSwitchWithValue("custom-scheme-name", _custom_scheme.value().name);
+        command_line->AppendSwitchWithValue("custom-scheme-domain", _custom_scheme.value().domain);
+    }
 }
 
 void IRuntime::OnContextInitialized()
 {
+    if (_custom_scheme.has_value())
+    {
+        CefRegisterSchemeHandlerFactory(_custom_scheme.value().name,
+                                        _custom_scheme.value().domain,
+                                        new ISchemeHandlerFactory(_custom_scheme.value()));
+    }
+
     _handler.on_context_initialized(_handler.context);
 }
 

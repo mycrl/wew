@@ -1,22 +1,32 @@
 //
-//  request_handler.h
+//  scheme.h
 //  webview
 //
 //  Created by mycrl on 2025/6/19.
 //
 
-#ifndef request_handler_h
-#define request_handler_h
+#ifndef scheme_h
+#define scheme_h
 #pragma once
 
+#include <string>
+
 #include "include/cef_request_handler.h"
+#include "include/cef_scheme.h"
 
 #include "library.h"
+
+struct ICustomSchemeAttributes
+{
+    std::string name;
+    std::string domain;
+    const SchemeHandlerFactory *factory;
+};
 
 class IResourceHandler : public CefResourceHandler
 {
   public:
-    IResourceHandler(ResourceRequestHandler *request_handler, ResourceHandler *handler);
+    IResourceHandler(ICustomSchemeAttributes &attr, RequestHandler *handler);
 
     ~IResourceHandler();
 
@@ -88,28 +98,28 @@ class IResourceHandler : public CefResourceHandler
     virtual void Cancel() override;
 
   private:
-    ResourceHandler *_handler;
-    ResourceRequestHandler *_request_handler;
+    RequestHandler *_handler;
+    ICustomSchemeAttributes &_attr;
 
     IMPLEMENT_REFCOUNTING(IResourceHandler);
 };
 
-class IRequestHandler : public CefRequestHandler, public CefResourceRequestHandler
+class ISchemeHandlerFactory : public CefSchemeHandlerFactory
 {
   public:
-    IRequestHandler(ResourceRequestHandler *request_handler, ResourceHandler *handler);
+    ISchemeHandlerFactory(ICustomSchemeAttributes &attr);
 
-    ///
-    /// Called on the IO thread before a resource is loaded.
-    ///
-    virtual CefRefPtr<CefResourceHandler> GetResourceHandler(CefRefPtr<CefBrowser> browser,
-                                                             CefRefPtr<CefFrame> frame,
-                                                             CefRefPtr<CefRequest> request) override;
+    // Return a new scheme handler instance to handle the request.
+    virtual CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser> browser,
+                                                 CefRefPtr<CefFrame> frame,
+                                                 const CefString &scheme_name,
+                                                 CefRefPtr<CefRequest> request) override;
 
   private:
-    CefRefPtr<CefResourceHandler> _handler;
+    ICustomSchemeAttributes &_attr;
 
-    IMPLEMENT_REFCOUNTING(IRequestHandler);
+    IMPLEMENT_REFCOUNTING(ISchemeHandlerFactory);
+    DISALLOW_COPY_AND_ASSIGN(ISchemeHandlerFactory);
 };
 
-#endif /* request_handler_h */
+#endif /* scheme_h */
