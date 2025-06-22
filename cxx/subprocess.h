@@ -10,19 +10,13 @@
 #pragma once
 
 #include <optional>
+#include <string>
 
 #include "include/cef_app.h"
 
 class MessageSender : public CefV8Handler
 {
   public:
-    ///
-    /// Handle execution of the function identified by |name|. |object| is the
-    /// receiver ('this' object) of the function. |arguments| is the list of
-    /// arguments passed to the function. If execution succeeds set |retval| to
-    /// the function return value. If execution fails set |exception| to the
-    /// exception that will be thrown. Return true if execution was handled.
-    ///
     virtual bool Execute(const CefString &name,
                          CefRefPtr<CefV8Value> object,
                          const CefV8ValueList &arguments,
@@ -43,13 +37,6 @@ class MessageSender : public CefV8Handler
 class MessageReceiver : public CefV8Handler
 {
   public:
-    ///
-    /// Handle execution of the function identified by |name|. |object| is the
-    /// receiver ('this' object) of the function. |arguments| is the list of
-    /// arguments passed to the function. If execution succeeds set |retval| to
-    /// the function return value. If execution fails set |exception| to the
-    /// exception that will be thrown. Return true if execution was handled.
-    ///
     virtual bool Execute(const CefString &name,
                          CefRefPtr<CefV8Value> object,
                          const CefV8ValueList &arguments,
@@ -70,31 +57,30 @@ class ISubProcess : public CefApp, public CefRenderProcessHandler
   public:
     /* CefApp */
 
+    ///
+    /// Provides an opportunity to register custom schemes.
+    ///
     virtual void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
 
     ///
-    /// Return the handler for functionality specific to the render process. This
-    /// method is called on the render process main thread.
+    /// Return the handler for functionality specific to the render process.
     ///
     CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override;
 
     /* CefRenderProcessHandler */
 
     ///
-    /// Called immediately after the V8 context for a frame has been created. To
-    /// retrieve the JavaScript 'window' object use the CefV8Context::GetGlobal()
-    /// method. V8 handles can only be accessed from the thread on which they are
-    /// created. A task runner for posting tasks on the associated thread can be
-    /// retrieved via the CefV8Context::GetTaskRunner() method.
+    /// Called immediately after the V8 context for a frame has been created.
     ///
     virtual void OnContextCreated(CefRefPtr<CefBrowser> browser,
                                   CefRefPtr<CefFrame> frame,
                                   CefRefPtr<CefV8Context> context) override;
 
     ///
-    /// Called when a new message is received from a different process. Return
-    /// true if the message was handled or false otherwise. It is safe to keep a
-    /// reference to |message| outside of this callback.
+    /// Called when a new message is received from a different process.
+    ///
+    /// Return true if the message was handled or false otherwise. It is safe to keep a reference to |message| outside
+    /// of this callback.
     ///
     virtual bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                           CefRefPtr<CefFrame> frame,

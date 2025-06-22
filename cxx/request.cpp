@@ -1,24 +1,26 @@
 //
-//  scheme.cpp
+//  request.cpp
 //  webview
 //
 //  Created by mycrl on 2025/6/19.
 //
 
-#include "scheme.h"
+#include "request.h"
 
 // clang-format off
-IResourceHandler::IResourceHandler(ICustomSchemeAttributes &attr, RequestHandler *handler)
+IResourceHandler::IResourceHandler(const RequestHandlerFactory *factory, RequestHandler *handler)
     : _handler(handler)
-    , _attr(attr)
+    , _factory(factory)
 {
+    assert(factory != nullptr);
+    assert(handler != nullptr);
 }
 // clang-format on
 
 IResourceHandler::~IResourceHandler()
 {
     _handler->destroy(_handler->context);
-    _attr.factory->destroy_request_handler(_handler);
+    _factory->destroy_request_handler(_handler);
 }
 
 bool IResourceHandler::Open(CefRefPtr<CefRequest> request, bool &handle_request, CefRefPtr<CefCallback> callback)
@@ -92,5 +94,32 @@ CefRefPtr<CefResourceHandler> ISchemeHandlerFactory::Create(CefRefPtr<CefBrowser
         return nullptr;
     }
 
-    return new IResourceHandler(_attr, handler);
+    return new IResourceHandler(_attr.factory, handler);
+}
+
+IResourceRequestHandler::IResourceRequestHandler(const RequestHandlerFactory *factory) : _factory(factory)
+{
+}
+
+CefRefPtr<CefResourceHandler> IResourceRequestHandler::GetResourceHandler(CefRefPtr<CefBrowser> browser,
+                                                                          CefRefPtr<CefFrame> frame,
+                                                                          CefRefPtr<CefRequest> req)
+{
+    if (_factory == nullptr)
+    {
+        return nullptr;
+    }
+
+    std::string referrer = req->GetReferrerURL().ToString();
+    std::string method = req->GetMethod().ToString();
+    std::string url = req->GetURL().ToString();
+
+    Request request = {.url = url.c_str(), .method = method.c_str(), .referrer = referrer.c_str()};
+    auto handler = _factory->request(&request, _factory->context);
+    if (handler == nullptr)
+    {
+        return nullptr;
+    }
+
+    return new IResourceHandler(_factory, handler);
 }

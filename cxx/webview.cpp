@@ -7,103 +7,6 @@
 
 #include "webview.h"
 
-void close_webview(void *webview_ptr)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->Close();
-    delete webview;
-}
-
-void webview_mouse_click(void *webview_ptr, cef_mouse_event_t event, cef_mouse_button_type_t button, bool pressed)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->OnMouseClick(event, button, pressed);
-}
-
-void webview_mouse_wheel(void *webview_ptr, cef_mouse_event_t event, int x, int y)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->OnMouseWheel(event, x, y);
-}
-
-void webview_mouse_move(void *webview_ptr, cef_mouse_event_t event)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->OnMouseMove(event);
-}
-
-void webview_keyboard(void *webview_ptr, cef_key_event_t event)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->OnKeyboard(event);
-}
-
-void webview_touch(void *webview_ptr, cef_touch_event_t event)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->OnTouch(event);
-}
-
-void webview_ime_composition(void *webview_ptr, const char *input)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->OnIMEComposition(input);
-}
-
-void webview_ime_set_composition(void *webview_ptr, const char *input, int x, int y)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->OnIMESetComposition(input, x, y);
-}
-
-void webview_send_message(void *webview_ptr, const char *message)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->SendMessage(std::string(message));
-}
-
-void webview_set_devtools_state(void *webview_ptr, bool is_open)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->SetDevToolsOpenState(is_open);
-}
-
-void webview_resize(void *webview_ptr, int width, int height)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    webview->ref->Resize(width, height);
-}
-
-const void *webview_get_window_handle(void *webview_ptr)
-{
-    assert(webview_ptr != nullptr);
-
-    auto webview = static_cast<WebView *>(webview_ptr);
-    return webview->ref->GetWindowHandle();
-}
-
 // clang-format off
 IWebView::IWebView(CefSettings &cef_settings, 
                    const WebViewSettings *settings, 
@@ -114,6 +17,7 @@ IWebView::IWebView(CefSettings &cef_settings,
     _view_rect.width = settings->width;
     _view_rect.height = settings->height;
     _device_scale_factor = settings->device_scale_factor;
+    _resource_request_handler = new IResourceRequestHandler(settings->request_handler_factory);
 }
 // clang-format on
 
@@ -156,36 +60,29 @@ bool IWebView::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
 
 CefRefPtr<CefDisplayHandler> IWebView::GetDisplayHandler()
 {
-    if (_is_closed)
-    {
-        return nullptr;
-    }
+    CHECK_REFCOUNTING(nullptr);
 
     return this;
 }
 
 CefRefPtr<CefLifeSpanHandler> IWebView::GetLifeSpanHandler()
 {
-    if (_is_closed)
-    {
-        return nullptr;
-    }
+    CHECK_REFCOUNTING(nullptr);
 
     return this;
 }
 
 CefRefPtr<CefLoadHandler> IWebView::GetLoadHandler()
 {
-    if (_is_closed)
-    {
-        return nullptr;
-    }
+    CHECK_REFCOUNTING(nullptr);
 
     return this;
 }
 
 CefRefPtr<CefRenderHandler> IWebView::GetRenderHandler()
 {
+    CHECK_REFCOUNTING(nullptr);
+
     if (_cef_settings.windowless_rendering_enabled)
     {
         return this;
@@ -196,22 +93,28 @@ CefRefPtr<CefRenderHandler> IWebView::GetRenderHandler()
     }
 }
 
+CefRefPtr<CefRequestHandler> IWebView::GetRequestHandler()
+{
+    CHECK_REFCOUNTING(nullptr);
+
+    if (_resource_request_handler == nullptr)
+    {
+        return nullptr;
+    }
+
+    return this;
+}
+
 void IWebView::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     _handler.on_state_change(WebViewState::BeforeLoad, _handler.context);
 }
 
 void IWebView::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     _handler.on_state_change(WebViewState::Loaded, _handler.context);
 }
@@ -222,10 +125,7 @@ void IWebView::OnLoadError(CefRefPtr<CefBrowser> browser,
                            const CefString &error_text,
                            const CefString &failed_url)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     _handler.on_state_change(WebViewState::LoadError, _handler.context);
 
@@ -237,10 +137,7 @@ void IWebView::OnLoadError(CefRefPtr<CefBrowser> browser,
 
 void IWebView::OnAfterCreated(CefRefPtr<CefBrowser> browser)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     browser->GetHost()->WasResized();
     _browser = browser;
@@ -287,10 +184,7 @@ void IWebView::OnBeforeClose(CefRefPtr<CefBrowser> browser)
 
 void IWebView::SetDevToolsOpenState(bool is_open)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -317,10 +211,7 @@ bool IWebView::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                         CefProcessId source_process,
                                         CefRefPtr<CefProcessMessage> message)
 {
-    if (_is_closed)
-    {
-        return false;
-    }
+    CHECK_REFCOUNTING(false);
 
     if (!_browser.has_value())
     {
@@ -335,10 +226,7 @@ bool IWebView::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
 
 void IWebView::SendMessage(std::string message)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -354,10 +242,7 @@ void IWebView::SendMessage(std::string message)
 
 void IWebView::Close()
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -366,15 +251,13 @@ void IWebView::Close()
 
     _browser.value()->GetHost()->CloseBrowser(true);
     _browser = std::nullopt;
-    _is_closed = true;
+
+    CLOSE_RUNNING;
 }
 
 void IWebView::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString &title)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     std::string value = title.ToString();
     _handler.on_title_change(value.c_str(), _handler.context);
@@ -382,10 +265,7 @@ void IWebView::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString &tit
 
 void IWebView::OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     _handler.on_fullscreen_change(fullscreen, _handler.context);
 };
@@ -394,10 +274,7 @@ void IWebView::OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
                                             const CefRange &selected_range,
                                             const RectList &character_bounds)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (character_bounds.size() == 0)
     {
@@ -410,10 +287,7 @@ void IWebView::OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
 
 void IWebView::GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     rect.width = _view_rect.width;
     rect.height = _view_rect.height;
@@ -426,10 +300,7 @@ void IWebView::OnPaint(CefRefPtr<CefBrowser> browser,
                        int width,
                        int height)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (buffer == nullptr)
     {
@@ -439,12 +310,22 @@ void IWebView::OnPaint(CefRefPtr<CefBrowser> browser,
     _handler.on_frame(buffer, width, height, _handler.context);
 }
 
+CefRefPtr<CefResourceRequestHandler> IWebView::GetResourceRequestHandler(CefRefPtr<CefBrowser> browser,
+                                                                         CefRefPtr<CefFrame> frame,
+                                                                         CefRefPtr<CefRequest> request,
+                                                                         bool is_navigation,
+                                                                         bool is_download,
+                                                                         const CefString &request_initiator,
+                                                                         bool &disable_default_handling)
+{
+    CHECK_REFCOUNTING(nullptr);
+
+    return _resource_request_handler;
+}
+
 bool IWebView::GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo &info)
 {
-    if (_is_closed)
-    {
-        return false;
-    }
+    CHECK_REFCOUNTING(false);
 
     info.device_scale_factor = _device_scale_factor;
 
@@ -453,10 +334,7 @@ bool IWebView::GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo &info)
 
 void IWebView::OnIMEComposition(std::string input)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -468,10 +346,7 @@ void IWebView::OnIMEComposition(std::string input)
 
 void IWebView::OnIMESetComposition(std::string input, int x, int y)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -486,10 +361,7 @@ void IWebView::OnIMESetComposition(std::string input, int x, int y)
 }
 void IWebView::OnMouseClick(cef_mouse_event_t event, cef_mouse_button_type_t button, bool pressed)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -501,10 +373,7 @@ void IWebView::OnMouseClick(cef_mouse_event_t event, cef_mouse_button_type_t but
 
 void IWebView::OnMouseMove(cef_mouse_event_t event)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -516,10 +385,7 @@ void IWebView::OnMouseMove(cef_mouse_event_t event)
 
 void IWebView::OnMouseWheel(cef_mouse_event_t event, int x, int y)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -531,10 +397,7 @@ void IWebView::OnMouseWheel(cef_mouse_event_t event, int x, int y)
 
 void IWebView::OnKeyboard(cef_key_event_t event)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -546,10 +409,7 @@ void IWebView::OnKeyboard(cef_key_event_t event)
 
 void IWebView::OnTouch(cef_touch_event_t event)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -561,10 +421,7 @@ void IWebView::OnTouch(cef_touch_event_t event)
 
 void IWebView::Resize(int width, int height)
 {
-    if (_is_closed)
-    {
-        return;
-    }
+    CHECK_REFCOUNTING();
 
     if (!_browser.has_value())
     {
@@ -574,4 +431,91 @@ void IWebView::Resize(int width, int height)
     _view_rect.width = width;
     _view_rect.height = height;
     _browser.value()->GetHost()->WasResized();
+}
+
+void close_webview(void *webview)
+{
+    assert(webview != nullptr);
+
+    auto view = static_cast<WebView *>(webview);
+    view->ref->Close();
+
+    delete view;
+}
+
+void webview_mouse_click(void *webview, cef_mouse_event_t event, cef_mouse_button_type_t button, bool pressed)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->OnMouseClick(event, button, pressed);
+}
+
+void webview_mouse_wheel(void *webview, cef_mouse_event_t event, int x, int y)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->OnMouseWheel(event, x, y);
+}
+
+void webview_mouse_move(void *webview, cef_mouse_event_t event)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->OnMouseMove(event);
+}
+
+void webview_keyboard(void *webview, cef_key_event_t event)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->OnKeyboard(event);
+}
+
+void webview_touch(void *webview, cef_touch_event_t event)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->OnTouch(event);
+}
+
+void webview_ime_composition(void *webview, const char *input)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->OnIMEComposition(input);
+}
+
+void webview_ime_set_composition(void *webview, const char *input, int x, int y)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->OnIMESetComposition(input, x, y);
+}
+
+void webview_send_message(void *webview, const char *message)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->SendMessage(std::string(message));
+}
+
+void webview_set_devtools_state(void *webview, bool is_open)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->SetDevToolsOpenState(is_open);
+}
+
+void webview_resize(void *webview, int width, int height)
+{
+    assert(webview != nullptr);
+
+    static_cast<WebView *>(webview)->ref->Resize(width, height);
+}
+
+const void *webview_get_window_handle(void *webview)
+{
+    assert(webview != nullptr);
+
+    return static_cast<WebView *>(webview)->ref->GetWindowHandle();
 }

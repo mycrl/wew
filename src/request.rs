@@ -4,6 +4,7 @@ use std::{
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     ptr::null_mut,
+    sync::Arc,
 };
 
 use url::Url;
@@ -58,17 +59,17 @@ impl RequestHandler for LocalDiskRequestHandler {
     }
 }
 
-/// This Scheme request handler is used to quickly map to the local file system.
-pub struct SchemeWithLocalDisk {
+/// This request handler is used to quickly map to the local file system.
+pub struct RequestHandlerWithLocalDisk {
     root_dir: PathBuf,
 }
 
-impl SchemeWithLocalDisk {
-    /// Create a Scheme request handler
+impl RequestHandlerWithLocalDisk {
+    /// Create a request handler
     ///
-    /// This method is used to create a Scheme request handler. You need to
+    /// This method is used to create a request handler. You need to
     /// provide a root directory, and files under this root directory will be
-    /// mapped to the Scheme.
+    /// mapped to the request.
     pub fn new(root_dir: &str) -> Self {
         Self {
             root_dir: PathBuf::from(root_dir),
@@ -76,7 +77,7 @@ impl SchemeWithLocalDisk {
     }
 }
 
-impl SchemeHandlerFactory for SchemeWithLocalDisk {
+impl RequestHandlerFactory for RequestHandlerWithLocalDisk {
     fn request(&self, request: &Request) -> Option<Box<dyn RequestHandler>> {
         let url = if request.url.len() == 0 {
             "http://localhost/index.html"
@@ -210,7 +211,7 @@ impl RequestHandler for Box<dyn RequestHandler> {
 /// Custom Scheme handler factory
 ///
 /// This interface is used to handle custom Scheme requests.
-pub trait SchemeHandlerFactory: Send + Sync {
+pub trait RequestHandlerFactory: Send + Sync {
     /// Handle request
     ///
     /// This method is used to handle requests. You can return request handling
@@ -221,13 +222,13 @@ pub trait SchemeHandlerFactory: Send + Sync {
     fn request(&self, request: &Request) -> Option<Box<dyn RequestHandler>>;
 }
 
-pub struct CustomSchemeAttributes<'a> {
+pub struct CustomSchemeAttributes {
     pub(crate) name: CString,
     pub(crate) domain: CString,
-    pub(crate) handler: &'a CustomSchemeHandler,
+    pub(crate) handler: CustomRequestHandlerFactory,
 }
 
-impl<'a> CustomSchemeAttributes<'a> {
+impl<'a> CustomSchemeAttributes {
     /// Create custom Scheme attributes
     ///
     /// This method is used to create custom Scheme attributes. You need to
@@ -235,7 +236,7 @@ impl<'a> CustomSchemeAttributes<'a> {
     ///
     /// The name is the Scheme name, the domain is the Scheme domain, and the
     /// handler is the program used to handle requests.
-    pub fn new(name: &'a str, domain: &'a str, handler: &'a CustomSchemeHandler) -> Self {
+    pub fn new(name: &'a str, domain: &'a str, handler: CustomRequestHandlerFactory) -> Self {
         Self {
             domain: CString::new(domain).unwrap(),
             name: CString::new(name).unwrap(),
@@ -244,40 +245,43 @@ impl<'a> CustomSchemeAttributes<'a> {
     }
 }
 
+struct ICustomRequestHandlerFactory {
+    raw: ThreadSafePointer<Box<dyn RequestHandlerFactory>>,
+    raw_handler: ThreadSafePointer<sys::RequestHandlerFactory>,
+}
+
+impl Drop for ICustomRequestHandlerFactory {
+    fn drop(&mut self) {
+        drop(unsafe { Box::from_raw(self.raw.as_ptr()) });
+    }
+}
+
 /// Custom Scheme handler
 ///
 /// This struct is used to handle custom Scheme requests.
-pub struct CustomSchemeHandler {
-    raw: ThreadSafePointer<Box<dyn SchemeHandlerFactory>>,
-    raw_handler: sys::SchemeHandlerFactory,
-}
+#[derive(Clone)]
+pub struct CustomRequestHandlerFactory(Arc<ICustomRequestHandlerFactory>);
 
-impl CustomSchemeHandler {
+impl CustomRequestHandlerFactory {
     pub fn new<T>(handler: T) -> Self
     where
-        T: SchemeHandlerFactory + 'static,
+        T: RequestHandlerFactory + 'static,
     {
-        let raw: *mut Box<dyn SchemeHandlerFactory> = Box::into_raw(Box::new(Box::new(handler)));
-        let raw_handler = sys::SchemeHandlerFactory {
+        let raw: *mut Box<dyn RequestHandlerFactory> = Box::into_raw(Box::new(Box::new(handler)));
+        let raw_handler = Box::into_raw(Box::new(sys::RequestHandlerFactory {
             request: Some(on_create_request_handler),
             destroy_request_handler: Some(on_destroy_request_handler),
             context: raw as _,
-        };
+        }));
 
-        Self {
+        Self(Arc::new(ICustomRequestHandlerFactory {
             raw: ThreadSafePointer(raw),
-            raw_handler,
-        }
+            raw_handler: ThreadSafePointer(raw_handler),
+        }))
     }
 
-    pub(crate) fn as_raw(&self) -> *const sys::SchemeHandlerFactory {
-        &self.raw_handler
-    }
-}
-
-impl Drop for CustomSchemeHandler {
-    fn drop(&mut self) {
-        drop(unsafe { Box::from_raw(self.raw.as_ptr()) });
+    pub(crate) fn as_raw_handler(&self) -> &ThreadSafePointer<sys::RequestHandlerFactory> {
+        &self.0.raw_handler
     }
 }
 
@@ -300,7 +304,7 @@ extern "C" fn on_create_request_handler(
 
     if let Some(request) = Request::from_raw_ptr(request) {
         if let Some(handler) =
-            unsafe { &*(context as *mut Box<dyn SchemeHandlerFactory>) }.request(&request)
+            unsafe { &*(context as *mut Box<dyn RequestHandlerFactory>) }.request(&request)
         {
             return Box::into_raw(Box::new(sys::RequestHandler {
                 open: Some(on_open),

@@ -51,13 +51,13 @@ typedef struct
     RequestHandler *(*request)(Request *request, void *context);
     void (*destroy_request_handler)(RequestHandler *handler);
     void *context;
-} SchemeHandlerFactory;
+} RequestHandlerFactory;
 
 typedef struct
 {
     const char *name;
     const char *domain;
-    const SchemeHandlerFactory *factory;
+    const RequestHandlerFactory *factory;
 } CustomSchemeAttributes;
 
 typedef struct
@@ -119,6 +119,12 @@ typedef struct
     /// webview defalt font size.
     int default_font_size;
 
+    /// Controls whether WebGL is enabled.
+    bool webgl;
+
+    /// Controls whether databases are enabled.
+    bool databases;
+
     /// Controls whether JavaScript can be executed.
     bool javascript;
 
@@ -134,6 +140,9 @@ typedef struct
 
     /// External native window handle.
     const void *window_handle;
+
+    /// The request handler factory.
+    const RequestHandlerFactory *request_handler_factory;
 } WebViewSettings;
 
 typedef enum
@@ -156,85 +165,85 @@ typedef struct
     void *context;
 } WebViewHandler;
 
+// clang-format off
+
 #ifdef __cplusplus
 extern "C"
 {
 
 #endif
 
-    EXPORT int execute_subprocess(int argc, const char **argv);
+EXPORT cef_resultcode_t get_result_code();
 
-    EXPORT void run_message_loop();
+EXPORT int execute_subprocess(int argc, const char **argv);
 
-    EXPORT void quit_message_loop();
+EXPORT void run_message_loop();
 
-    EXPORT void poll_message_loop();
+EXPORT void quit_message_loop();
 
-    EXPORT void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler);
+EXPORT void poll_message_loop();
 
-    EXPORT void execute_runtime(void *runtime_ptr, int argc, const char **argv);
+EXPORT void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler);
 
-    //
-    // This function should be called on the main application thread to shut down
-    // the CEF browser process before the application exits.
-    //
-    EXPORT void close_runtime(void *runtime_ptr);
+EXPORT bool execute_runtime(void *runtime, int argc, const char **argv);
 
-    EXPORT void *create_webview(void *runtime_ptr,
-                                const char *url,
-                                const WebViewSettings *settings,
-                                WebViewHandler handler);
+///
+/// This function should be called on the main application thread to shut down
+/// the CEF browser process before the application exits.
+///
+EXPORT void close_runtime(void *runtime);
 
-    EXPORT void close_webview(void *webview_ptr);
+EXPORT void *create_webview(void *runtime,
+                            const char *url,
+                            const WebViewSettings *settings,
+                            WebViewHandler handler);
 
-    //
-    // Send a mouse click event to the browser.
-    //
-    EXPORT void webview_mouse_click(void *webview_ptr,
-                                    cef_mouse_event_t event,
-                                    cef_mouse_button_type_t button,
-                                    bool pressed);
+EXPORT void close_webview(void *webview);
 
-    //
-    // Send a mouse wheel event to the browser. The |x| and |y| coordinates are
-    // relative to the upper-left corner of the view. The |deltaX| and |deltaY|
-    // values represent the movement delta in the X and Y directions
-    // respectively. In order to scroll inside select popups with window
-    // rendering disabled CefRenderHandler::GetScreenPoint should be implemented
-    // properly.
-    //
-    EXPORT void webview_mouse_wheel(void *webview_ptr, cef_mouse_event_t event, int x, int y);
+///
+/// Send a mouse click event to the browser.
+///
+EXPORT void webview_mouse_click(void *webview,
+                                cef_mouse_event_t event,
+                                cef_mouse_button_type_t button,
+                                bool pressed);
 
-    //
-    // Send a mouse move event to the browser. The |x| and |y| coordinates are
-    // relative to the upper-left corner of the view.
-    //
-    EXPORT void webview_mouse_move(void *webview_ptr, cef_mouse_event_t event);
+///
+/// Send a mouse wheel event to the browser.
+///
+EXPORT void webview_mouse_wheel(void *webview, cef_mouse_event_t event, int x, int y);
 
-    //
-    // Send a key event to the browser.
-    //
-    EXPORT void webview_keyboard(void *webview_ptr, cef_key_event_t event);
+///
+/// Send a mouse move event to the browser.
+///
+EXPORT void webview_mouse_move(void *webview, cef_mouse_event_t event);
 
-    //
-    // Send a touch event to the browser.
-    //
-    EXPORT void webview_touch(void *webview_ptr, cef_touch_event_t event);
+///
+/// Send a key event to the browser.
+///
+EXPORT void webview_keyboard(void *webview, cef_key_event_t event);
 
-    EXPORT void webview_ime_composition(void *webview_ptr, const char *input);
+///
+/// Send a touch event to the browser.
+///
+EXPORT void webview_touch(void *webview, cef_touch_event_t event);
 
-    EXPORT void webview_ime_set_composition(void *webview_ptr, const char *input, int x, int y);
+EXPORT void webview_ime_composition(void *webview, const char *input);
 
-    EXPORT void webview_send_message(void *webview_ptr, const char *message);
+EXPORT void webview_ime_set_composition(void *webview, const char *input, int x, int y);
 
-    EXPORT void webview_set_devtools_state(void *webview_ptr, bool is_open);
+EXPORT void webview_send_message(void *webview, const char *message);
 
-    EXPORT void webview_resize(void *webview_ptr, int width, int height);
+EXPORT void webview_set_devtools_state(void *webview, bool is_open);
 
-    EXPORT const void *webview_get_window_handle(void *webview_ptr);
+EXPORT void webview_resize(void *webview, int width, int height);
+
+EXPORT const void *webview_get_window_handle(void *webview);
 
 #ifdef __cplusplus
 }
 #endif
+
+// clang-format on
 
 #endif /* library_h */

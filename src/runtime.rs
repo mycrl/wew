@@ -13,9 +13,9 @@ use std::{
 use parking_lot::Mutex;
 
 use crate::{
-    Args, CStringExt, Error, MainThreadRuntime, MessagePumpRuntime, MultiThreadRuntime,
+    Args, CStringExt, Error, MainThreadMessageLoop, MessagePumpLoop, MultiThreadMessageLoop,
     NativeWindowWebView, ThreadSafePointer, WindowlessRenderWebView,
-    scheme::CustomSchemeAttributes,
+    request::CustomSchemeAttributes,
     sys,
     webview::{
         MixWebviewHnadler, WebView, WebViewAttributes, WebViewHandler,
@@ -25,14 +25,14 @@ use crate::{
 
 /// Runtime configuration attributes
 #[derive(Default)]
-pub struct RuntimeAttributes<'a, R, W> {
+pub struct RuntimeAttributes<R, W> {
     _r: PhantomData<R>,
     _w: PhantomData<W>,
 
     /// Custom scheme handler
     ///
     /// This is used to handle custom scheme requests.
-    custom_scheme: Option<CustomSchemeAttributes<'a>>,
+    custom_scheme: Option<CustomSchemeAttributes>,
 
     /// Whether to enable windowless rendering mode
     ///
@@ -77,44 +77,44 @@ pub struct RuntimeAttributes<'a, R, W> {
     multi_threaded_message_loop: bool,
 }
 
-impl<'a, W> RuntimeAttributes<'a, MainThreadRuntime, W> {
-    pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MainThreadRuntime, W>, Error>
+impl<W> RuntimeAttributes<MainThreadMessageLoop, W> {
+    pub fn create_runtime<T>(self, handler: T) -> Result<Runtime<MainThreadMessageLoop, W>, Error>
     where
         T: RuntimeHandler + 'static,
     {
-        Runtime::new(&self, MixRuntimeHnadler::RuntimeHandler(Box::new(handler)))
+        Runtime::new(self, MixRuntimeHnadler::RuntimeHandler(Box::new(handler)))
     }
 }
 
-impl<'a, W> RuntimeAttributes<'a, MultiThreadRuntime, W> {
-    pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MultiThreadRuntime, W>, Error>
+impl<W> RuntimeAttributes<MultiThreadMessageLoop, W> {
+    pub fn create_runtime<T>(self, handler: T) -> Result<Runtime<MultiThreadMessageLoop, W>, Error>
     where
         T: RuntimeHandler + 'static,
     {
-        Runtime::new(&self, MixRuntimeHnadler::RuntimeHandler(Box::new(handler)))
+        Runtime::new(self, MixRuntimeHnadler::RuntimeHandler(Box::new(handler)))
     }
 }
 
-impl<'a, W> RuntimeAttributes<'a, MessagePumpRuntime, W> {
-    pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MessagePumpRuntime, W>, Error>
+impl<W> RuntimeAttributes<MessagePumpLoop, W> {
+    pub fn create_runtime<T>(self, handler: T) -> Result<Runtime<MessagePumpLoop, W>, Error>
     where
         T: MessagePumpRuntimeHandler + 'static,
     {
         Runtime::new(
-            &self,
+            self,
             MixRuntimeHnadler::MessagePumpRuntimeHandler(Box::new(handler)),
         )
     }
 }
 
 #[derive(Default)]
-pub struct RuntimeAttributesBuilder<'a, R, W>(RuntimeAttributes<'a, R, W>);
+pub struct RuntimeAttributesBuilder<R, W>(RuntimeAttributes<R, W>);
 
-impl<'a, R, W> RuntimeAttributesBuilder<'a, R, W> {
+impl<R, W> RuntimeAttributesBuilder<R, W> {
     /// Set the custom scheme handler
     ///
     /// This is used to handle custom scheme requests.
-    pub fn with_custom_scheme(mut self, scheme: CustomSchemeAttributes<'a>) -> Self {
+    pub fn with_custom_scheme(mut self, scheme: CustomSchemeAttributes) -> Self {
         self.0.custom_scheme = Some(scheme);
         self
     }
@@ -159,32 +159,32 @@ impl<'a, R, W> RuntimeAttributesBuilder<'a, R, W> {
     }
 }
 
-impl<'a, W> RuntimeAttributesBuilder<'a, MultiThreadRuntime, W> {
-    pub fn build(mut self) -> RuntimeAttributes<'a, MultiThreadRuntime, W> {
+impl<W> RuntimeAttributesBuilder<MultiThreadMessageLoop, W> {
+    pub fn build(mut self) -> RuntimeAttributes<MultiThreadMessageLoop, W> {
         self.0.multi_threaded_message_loop = true;
         self.0.external_message_pump = false;
         self.0
     }
 }
 
-impl<'a, W> RuntimeAttributesBuilder<'a, MainThreadRuntime, W> {
-    pub fn build(mut self) -> RuntimeAttributes<'a, MainThreadRuntime, W> {
+impl<W> RuntimeAttributesBuilder<MainThreadMessageLoop, W> {
+    pub fn build(mut self) -> RuntimeAttributes<MainThreadMessageLoop, W> {
         self.0.multi_threaded_message_loop = false;
         self.0.external_message_pump = false;
         self.0
     }
 }
 
-impl<'a, W> RuntimeAttributesBuilder<'a, MessagePumpRuntime, W> {
-    pub fn build(mut self) -> RuntimeAttributes<'a, MessagePumpRuntime, W> {
+impl<W> RuntimeAttributesBuilder<MessagePumpLoop, W> {
+    pub fn build(mut self) -> RuntimeAttributes<MessagePumpLoop, W> {
         self.0.multi_threaded_message_loop = false;
         self.0.external_message_pump = true;
         self.0
     }
 }
 
-impl<'a, R, W> Deref for RuntimeAttributesBuilder<'a, R, W> {
-    type Target = RuntimeAttributes<'a, R, W>;
+impl<R, W> Deref for RuntimeAttributesBuilder<R, W> {
+    type Target = RuntimeAttributes<R, W>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -216,16 +216,39 @@ pub trait MessagePumpRuntimeHandler: RuntimeHandler {
 static RUNTIME_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[allow(unused)]
-pub struct Runtime<R, W> {
+pub(crate) struct IRuntime<R, W> {
     _r: PhantomData<R>,
     _w: PhantomData<W>,
+    attr: RuntimeAttributes<R, W>,
     handler: ThreadSafePointer<MixRuntimeHnadler>,
-    raw: Mutex<Arc<ThreadSafePointer<c_void>>>,
-    multi_threaded_message_loop: bool,
+    pub(crate) raw: Mutex<Arc<ThreadSafePointer<c_void>>>,
 }
 
+impl<R, W> Drop for IRuntime<R, W> {
+    fn drop(&mut self) {
+        // If using multi-threaded message loop, quit the message loop.
+        if self.attr.multi_threaded_message_loop {
+            MainThreadMessageLoop::default().quit();
+        }
+
+        unsafe {
+            sys::close_runtime(self.raw.lock().as_ptr());
+        }
+
+        drop(unsafe { Box::from_raw(self.handler.as_ptr()) });
+
+        RUNTIME_RUNNING.store(false, Ordering::Relaxed);
+    }
+}
+
+#[derive(Clone)]
+pub struct Runtime<R, W>(pub(crate) Arc<IRuntime<R, W>>);
+
 impl<R, W> Runtime<R, W> {
-    fn new(attr: &RuntimeAttributes<R, W>, handler: MixRuntimeHnadler) -> Result<Self, Error> {
+    pub(crate) fn new(
+        attr: RuntimeAttributes<R, W>,
+        handler: MixRuntimeHnadler,
+    ) -> Result<Self, Error> {
         // Only one runtime is allowed per process, mainly because the runtime is bound
         // to the message loop.
         if RUNTIME_RUNNING.load(Ordering::Relaxed) {
@@ -238,7 +261,7 @@ impl<R, W> Runtime<R, W> {
             Some(sys::CustomSchemeAttributes {
                 name: attr.name.as_c_str().as_ptr(),
                 domain: attr.domain.as_c_str().as_ptr(),
-                factory: attr.handler.as_raw(),
+                factory: attr.handler.as_raw_handler().as_ptr(),
             })
         } else {
             None
@@ -293,13 +316,13 @@ impl<R, W> Runtime<R, W> {
             }
         }
 
-        Ok(Self {
+        Ok(Self(Arc::new(IRuntime {
             _r: PhantomData::default(),
             _w: PhantomData::default(),
-            multi_threaded_message_loop: attr.multi_threaded_message_loop,
             handler: ThreadSafePointer(handler),
             raw: Mutex::new(raw),
-        })
+            attr,
+        })))
     }
 }
 
@@ -307,14 +330,15 @@ impl<R> Runtime<R, WindowlessRenderWebView> {
     pub fn create_webview<T>(
         &self,
         url: &str,
-        attr: &WebViewAttributes,
+        attr: WebViewAttributes,
         handler: T,
-    ) -> Result<WebView<WindowlessRenderWebView>, Error>
+    ) -> Result<WebView<R, WindowlessRenderWebView>, Error>
     where
         T: WindowlessRenderWebViewHandler + 'static,
+        R: Clone,
     {
         WebView::new(
-            &self.raw.lock(),
+            self.clone(),
             url,
             attr,
             MixWebviewHnadler::WindowlessRenderWebViewHandler(Box::new(handler)),
@@ -326,14 +350,15 @@ impl<R> Runtime<R, NativeWindowWebView> {
     pub fn create_webview<T>(
         &self,
         url: &str,
-        attr: &WebViewAttributes,
+        attr: WebViewAttributes,
         handler: T,
-    ) -> Result<WebView<NativeWindowWebView>, Error>
+    ) -> Result<WebView<R, NativeWindowWebView>, Error>
     where
         T: WebViewHandler + 'static,
+        R: Clone,
     {
         WebView::new(
-            &self.raw.lock(),
+            self.clone(),
             url,
             attr,
             MixWebviewHnadler::WebViewHandler(Box::new(handler)),
@@ -341,61 +366,7 @@ impl<R> Runtime<R, NativeWindowWebView> {
     }
 }
 
-impl<R, W> Drop for Runtime<R, W> {
-    fn drop(&mut self) {
-        // If using multi-threaded message loop, quit the message loop.
-        if self.multi_threaded_message_loop {
-            unsafe {
-                sys::quit_message_loop();
-            }
-        }
-
-        unsafe {
-            sys::close_runtime(self.raw.lock().as_ptr());
-        }
-
-        drop(unsafe { Box::from_raw(self.handler.as_ptr()) });
-
-        RUNTIME_RUNNING.store(false, Ordering::Relaxed);
-    }
-}
-
-impl<W> Runtime<MessagePumpRuntime, W> {
-    /// Drive the message loop pump on main thread
-    ///
-    /// This function is used to poll the message loop on main thread.
-    ///
-    /// Note that this function won't block the current thread, external code
-    /// needs to drive the message loop pump.
-    pub fn poll(&self) {
-        unsafe { sys::poll_message_loop() }
-    }
-}
-
-impl<W> Runtime<MainThreadRuntime, W> {
-    /// Run the message loop on main thread
-    ///
-    /// This function is used to run the message loop on main thread.
-    ///
-    /// Note that this function will block the current thread until the message
-    /// loop ends.
-    pub fn block_run(&self) {
-        unsafe { sys::run_message_loop() }
-    }
-
-    /// Quit the message loop on main thread
-    ///
-    /// This function is used to quit the message loop on main thread.
-    ///
-    /// Calling this function will cause `block_run` to exit and return.
-    pub fn quit(&self) {
-        unsafe {
-            sys::quit_message_loop();
-        }
-    }
-}
-
-enum MixRuntimeHnadler {
+pub(crate) enum MixRuntimeHnadler {
     RuntimeHandler(Box<dyn RuntimeHandler>),
     MessagePumpRuntimeHandler(Box<dyn MessagePumpRuntimeHandler>),
 }

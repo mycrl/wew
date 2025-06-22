@@ -13,20 +13,6 @@
 #include "subprocess.h"
 #include "util.h"
 
-int execute_subprocess(int argc, const char **argv)
-{
-#ifdef MACOS
-    CefScopedLibraryLoader library_loader;
-    if (!library_loader.LoadInHelper())
-    {
-        return -1;
-    }
-#endif
-
-    auto main_args = get_main_args(argc, argv);
-    return CefExecuteProcess(main_args, new ISubProcess, nullptr);
-}
-
 CefRefPtr<CefRenderProcessHandler> ISubProcess::GetRenderProcessHandler()
 {
     return this;
@@ -35,13 +21,12 @@ CefRefPtr<CefRenderProcessHandler> ISubProcess::GetRenderProcessHandler()
 void ISubProcess::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar)
 {
     auto cmd = CefCommandLine::GetGlobalCommandLine();
-    if (cmd->HasSwitch("custom-scheme-name"))
+    if (cmd->HasSwitch("scheme-name"))
     {
-        auto name = cmd->GetSwitchValue("custom-scheme-name");
+        registrar->AddCustomScheme(cmd->GetSwitchValue("scheme-name"),
+                                   CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_CORS_ENABLED |
+                                       CEF_SCHEME_OPTION_FETCH_ENABLED);
     }
-
-    registrar->AddCustomScheme(
-        "webview", CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_CORS_ENABLED | CEF_SCHEME_OPTION_FETCH_ENABLED);
 }
 
 void ISubProcess::OnContextCreated(CefRefPtr<CefBrowser> browser,
@@ -66,6 +51,7 @@ bool ISubProcess::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
     auto args = message->GetArgumentList();
     std::string payload = args->GetString(0);
     _receiver->Recv(payload);
+
     return true;
 }
 
@@ -75,32 +61,25 @@ bool MessageSender::Execute(const CefString &name,
                             CefRefPtr<CefV8Value> &retval,
                             CefString &exception)
 {
-    if (!_browser.has_value())
+    if (_browser.has_value() && arguments.size() == 1 && arguments[0]->IsString())
+    {
+        CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
+        std::string message = arguments[0]->GetStringValue();
+
+        auto msg = CefProcessMessage::Create("MESSAGE_TRANSPORT");
+        CefRefPtr<CefListValue> args = msg->GetArgumentList();
+        args->SetSize(1);
+        args->SetString(0, message);
+
+        _browser.value()->GetMainFrame()->SendProcessMessage(PID_BROWSER, msg);
+        retval = CefV8Value::CreateUndefined();
+
+        return true;
+    }
+    else
     {
         return false;
     }
-
-    if (arguments.size() != 1)
-    {
-        return false;
-    }
-
-    if (!arguments[0]->IsString())
-    {
-        return false;
-    }
-
-    CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
-    std::string message = arguments[0]->GetStringValue();
-
-    auto msg = CefProcessMessage::Create("MESSAGE_TRANSPORT");
-    CefRefPtr<CefListValue> args = msg->GetArgumentList();
-    args->SetSize(1);
-    args->SetString(0, message);
-
-    _browser.value()->GetMainFrame()->SendProcessMessage(PID_BROWSER, msg);
-    retval = CefV8Value::CreateUndefined();
-    return true;
 }
 
 bool MessageReceiver::Execute(const CefString &name,
@@ -109,37 +88,42 @@ bool MessageReceiver::Execute(const CefString &name,
                               CefRefPtr<CefV8Value> &retval,
                               CefString &exception)
 {
-    if (arguments.size() != 1)
+    if (arguments.size() == 1 && arguments[0]->IsFunction())
+    {
+        _context = std::optional(CefV8Context::GetCurrentContext());
+        _callback = std::optional(arguments[0]);
+        retval = CefV8Value::CreateUndefined();
+
+        return true;
+    }
+    else
     {
         return false;
     }
-
-    if (!arguments[0]->IsFunction())
-    {
-        return false;
-    }
-
-    _context = std::optional(CefV8Context::GetCurrentContext());
-    _callback = std::optional(arguments[0]);
-    retval = CefV8Value::CreateUndefined();
-    return true;
 }
 
 void MessageReceiver::Recv(std::string message)
 {
-    if (!_context.has_value())
+    if (_context.has_value() && _callback.has_value())
     {
-        return;
+        _context.value()->Enter();
+        CefV8ValueList arguments;
+        arguments.push_back(CefV8Value::CreateString(message));
+        _callback.value()->ExecuteFunction(nullptr, arguments);
+        _context.value()->Exit();
     }
+}
 
-    if (!_callback.has_value())
+int execute_subprocess(int argc, const char **argv)
+{
+#ifdef MACOS
+    CefScopedLibraryLoader library_loader;
+    if (!library_loader.LoadInHelper())
     {
-        return;
+        return -1;
     }
+#endif
 
-    _context.value()->Enter();
-    CefV8ValueList arguments;
-    arguments.push_back(CefV8Value::CreateString(message));
-    _callback.value()->ExecuteFunction(nullptr, arguments);
-    _context.value()->Exit();
+    auto main_args = get_main_args(argc, argv);
+    return CefExecuteProcess(main_args, new ISubProcess, nullptr);
 }

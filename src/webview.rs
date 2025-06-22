@@ -1,6 +1,5 @@
 use std::{
     ffi::{CStr, CString, c_char, c_int, c_void},
-    marker::PhantomData,
     num::NonZeroIsize,
     ops::Deref,
     ptr::{NonNull, null},
@@ -9,7 +8,9 @@ use std::{
 use parking_lot::Mutex;
 use raw_window_handle::{AppKitWindowHandle, RawWindowHandle, Win32WindowHandle};
 
-use crate::{Error, ThreadSafePointer, WindowlessRenderWebView, sys};
+use crate::{
+    keyboard::{KeyEvent, KeyEventType}, request::CustomRequestHandlerFactory, runtime::Runtime, sys, Error, ThreadSafePointer, WindowlessRenderWebView
+};
 
 pub use self::sys::WebViewState;
 
@@ -76,44 +77,6 @@ pub enum IMEAction<'a> {
     Pre(&'a str, i32, i32),
 }
 
-/// Represents modifier keys
-///
-/// This is mainly used for keyboard events
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum Modifiers {
-    Shift,
-    Ctrl,
-    Alt,
-    Win,
-}
-
-/// Represents the type of key event
-///
-/// This is mainly used for keyboard events
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum KeyEventType {
-    RawKeyDown,
-    KeyDown,
-    KeyUp,
-    Char,
-}
-
-/// Represents a key event
-///
-/// This is mainly used for keyboard events
-#[derive(Debug, Copy, Clone)]
-pub struct KeyEvent {
-    pub size: usize,
-    pub ty: KeyEventType,
-    pub modifiers: u32,
-    pub windows_key_code: u32,
-    pub native_key_code: u32,
-    pub is_system_key: u32,
-    pub character: u16,
-    pub unmodified_character: u16,
-    pub focus_on_editable_field: u32,
-}
-
 #[allow(unused)]
 pub trait WebViewHandler: Send + Sync {
     /// Called when the web page state changes
@@ -151,6 +114,8 @@ pub trait WindowlessRenderWebViewHandler: WebViewHandler {
 }
 
 pub struct WebViewAttributes {
+    /// Request handler factory.
+    pub request_handler_factory: Option<CustomRequestHandlerFactory>,
     /// External native window handle.
     pub window_handle: Option<RawWindowHandle>,
     /// The maximum rate in frames per second (fps).
@@ -171,6 +136,10 @@ pub struct WebViewAttributes {
     pub javascript_access_clipboard: bool,
     /// Controls whether local storage can be used.
     pub local_storage: bool,
+    /// Controls whether WebGL is enabled.
+    pub webgl: bool,
+    /// Controls whether databases are enabled.
+    pub databases: bool,
 }
 
 unsafe impl Send for WebViewAttributes {}
@@ -189,6 +158,9 @@ impl Default for WebViewAttributes {
             javascript_enable: true,
             local_storage: true,
             javascript_access_clipboard: false,
+            request_handler_factory: None,
+            webgl: false,
+            databases: false,
         }
     }
 }
@@ -197,6 +169,14 @@ impl Default for WebViewAttributes {
 pub struct WebViewAttributesBuilder(WebViewAttributes);
 
 impl WebViewAttributesBuilder {
+    /// Set the request handler factory
+    ///
+    /// This function is used to set the request handler factory.
+    pub fn with_request_handler_factory(mut self, value: CustomRequestHandlerFactory) -> Self {
+        self.0.request_handler_factory = Some(value);
+        self
+    }
+
     /// Set the window handle
     ///
     /// In windowed mode, setting the window handle will set the browser as a
@@ -292,6 +272,22 @@ impl WebViewAttributesBuilder {
         self
     }
 
+    /// Set whether WebGL is enabled
+    ///
+    /// This function is used to set whether WebGL is enabled.
+    pub fn with_webgl(mut self, value: bool) -> Self {
+        self.0.webgl = value;
+        self
+    }
+
+    /// Set whether databases are enabled
+    ///
+    /// This function is used to set whether databases are enabled.
+    pub fn with_databases(mut self, value: bool) -> Self {
+        self.0.databases = value;
+        self
+    }
+
     pub fn build(self) -> WebViewAttributes {
         self.0
     }
@@ -305,23 +301,27 @@ impl Deref for WebViewAttributesBuilder {
     }
 }
 
-pub struct WebView<W> {
-    _w: PhantomData<W>,
+#[allow(unused)]
+pub struct WebView<R, W> {
+    runtime: Runtime<R, W>,
+    attr: WebViewAttributes,
     mouse_event: Mutex<sys::cef_mouse_event_t>,
     handler: ThreadSafePointer<MixWebviewHnadler>,
     raw: Mutex<ThreadSafePointer<c_void>>,
 }
 
-impl<W> WebView<W> {
+impl<R, W> WebView<R, W> {
     pub(crate) fn new(
-        runtime: &ThreadSafePointer<c_void>,
+        runtime: Runtime<R, W>,
         url: &str,
-        attr: &WebViewAttributes,
+        attr: WebViewAttributes,
         handler: MixWebviewHnadler,
     ) -> Result<Self, Error> {
         let options = sys::WebViewSettings {
             width: attr.width,
             height: attr.height,
+            webgl: attr.webgl,
+            databases: attr.databases,
             device_scale_factor: attr.device_scale_factor,
             windowless_frame_rate: attr.windowless_frame_rate,
             default_fixed_font_size: attr.default_fixed_font_size as _,
@@ -338,13 +338,18 @@ impl<W> WebView<W> {
             } else {
                 null()
             },
+            request_handler_factory: if let Some(it) = &attr.request_handler_factory {
+                it.as_raw_handler().as_ptr() as _
+            } else {
+                null()
+            },
         };
 
         let url = CString::new(url).unwrap();
         let handler: *mut MixWebviewHnadler = Box::into_raw(Box::new(handler));
         let ptr = unsafe {
             sys::create_webview(
-                runtime.as_ptr(),
+                runtime.0.raw.lock().as_ptr(),
                 url.as_c_str().as_ptr(),
                 &options,
                 sys::WebViewHandler {
@@ -366,10 +371,11 @@ impl<W> WebView<W> {
         };
 
         Ok(Self {
-            _w: PhantomData::default(),
             mouse_event: Mutex::new(unsafe { std::mem::zeroed() }),
             handler: ThreadSafePointer(handler),
             raw: Mutex::new(raw),
+            runtime,
+            attr,
         })
     }
 
@@ -415,13 +421,13 @@ impl<W> WebView<W> {
     }
 }
 
-impl WebView<WindowlessRenderWebView> {
+impl<R> WebView<R, WindowlessRenderWebView> {
     /// Send a mouse event
     ///
     /// This function is used to send mouse events.
     ///
     /// Note that this function only works in windowless rendering mode.
-    pub fn mouse(&self, action: MouseAction) {
+    pub fn mouse(&self, action: &MouseAction) {
         let mut event = self.mouse_event.lock();
 
         match action {
@@ -449,7 +455,7 @@ impl WebView<WindowlessRenderWebView> {
                             MouseButton::Middle => sys::cef_mouse_button_type_t::MBT_MIDDLE,
                             MouseButton::Right => sys::cef_mouse_button_type_t::MBT_RIGHT,
                         },
-                        state == KeyState::Down,
+                        state == &KeyState::Down,
                     )
                 }
             }
@@ -461,16 +467,16 @@ impl WebView<WindowlessRenderWebView> {
     /// This function is used to send keyboard events.
     ///
     /// Note that this function only works in windowless rendering mode.
-    pub fn keyboard(&self, event: KeyEvent) {
+    pub fn keyboard(&self, event: &KeyEvent) {
         unsafe {
             sys::webview_keyboard(
                 self.raw.lock().as_ptr(),
                 sys::cef_key_event_t {
-                    size: event.size,
-                    modifiers: event.modifiers,
+                    size: std::mem::size_of::<sys::cef_key_event_t>(),
                     windows_key_code: event.windows_key_code as i32,
                     native_key_code: event.native_key_code as i32,
                     is_system_key: event.is_system_key as i32,
+                    modifiers: event.modifiers as u32,
                     character: event.character,
                     unmodified_character: event.unmodified_character,
                     focus_on_editable_field: event.focus_on_editable_field as i32,
@@ -490,9 +496,9 @@ impl WebView<WindowlessRenderWebView> {
     /// This function is used to send IME events.
     ///
     /// Note that this function only works in windowless rendering mode.
-    pub fn ime(&self, action: IMEAction) {
+    pub fn ime(&self, action: &IMEAction) {
         let input = match action {
-            IMEAction::Composition(it) | IMEAction::Pre(it, _, _) => CString::new(it).unwrap(),
+            IMEAction::Composition(it) | IMEAction::Pre(it, _, _) => CString::new(*it).unwrap(),
         };
 
         match action {
@@ -503,8 +509,8 @@ impl WebView<WindowlessRenderWebView> {
                 sys::webview_ime_set_composition(
                     self.raw.lock().as_ptr(),
                     input.as_c_str().as_ptr(),
-                    x,
-                    y,
+                    *x,
+                    *y,
                 )
             },
         }
@@ -520,7 +526,7 @@ impl WebView<WindowlessRenderWebView> {
     }
 }
 
-impl<W> Drop for WebView<W> {
+impl<R, W> Drop for WebView<R, W> {
     fn drop(&mut self) {
         unsafe {
             sys::close_webview(self.raw.lock().as_ptr());

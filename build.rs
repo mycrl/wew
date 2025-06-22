@@ -81,7 +81,13 @@ fn main() -> Result<()> {
         {
             exec(
                 &format!(
-                    "curl -L --retry 10 --retry-delay 3 --retry-connrefused --retry-max-time 300 -o ./cef.tar.bz2 \"{}\"",
+                    "curl \
+                        -L \
+                        --retry 10 \
+                        --retry-delay 3 \
+                        --retry-connrefused \
+                        --retry-max-time 300 \
+                        -o ./cef.tar.bz2 \"{}\"",
                     get_binary_url(),
                 ),
                 &out_dir,
@@ -153,6 +159,20 @@ fn main() -> Result<()> {
     }
 
     {
+        bindgen::Builder::default()
+            .default_enum_style(bindgen::EnumVariation::Rust {
+                non_exhaustive: false,
+            })
+            .generate_comments(false)
+            .prepend_enum_name(false)
+            .size_t_is_usize(true)
+            .clang_arg(format!("-I{}", cef_path))
+            .header("./cxx/library.h")
+            .generate()?
+            .write_to_file(&join(&out_dir, "bindings.rs"))?;
+    }
+
+    {
         let mut compiler = cc::Build::new();
         compiler
             .cpp(true)
@@ -207,21 +227,6 @@ fn main() -> Result<()> {
         compiler.define("MACOS", Some("1"));
 
         compiler.compile("sys");
-    }
-
-    {
-        bindgen::Builder::default()
-            .default_enum_style(bindgen::EnumVariation::Rust {
-                non_exhaustive: false,
-            })
-            .generate_comments(false)
-            .prepend_enum_name(false)
-            .derive_eq(true)
-            .size_t_is_usize(true)
-            .clang_arg(format!("-I{}", cef_path))
-            .header("./cxx/library.h")
-            .generate()?
-            .write_to_file(&join(&out_dir, "bindings.rs"))?;
     }
 
     println!("cargo:rustc-link-lib=static=sys");
