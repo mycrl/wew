@@ -9,7 +9,11 @@ use parking_lot::Mutex;
 use raw_window_handle::{AppKitWindowHandle, RawWindowHandle, Win32WindowHandle};
 
 use crate::{
-    keyboard::{KeyEvent, KeyEventType}, request::CustomRequestHandlerFactory, runtime::Runtime, sys, Error, ThreadSafePointer, WindowlessRenderWebView
+    Error, ThreadSafePointer, WindowlessRenderWebView,
+    keyboard::{KeyEvent, KeyEventType},
+    request::CustomRequestHandlerFactory,
+    runtime::Runtime,
+    sys,
 };
 
 pub use self::sys::WebViewState;

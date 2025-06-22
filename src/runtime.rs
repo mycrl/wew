@@ -253,8 +253,6 @@ impl<R, W> Runtime<R, W> {
         // to the message loop.
         if RUNTIME_RUNNING.load(Ordering::Relaxed) {
             return Err(Error::RuntimeAlreadyExists);
-        } else {
-            RUNTIME_RUNNING.store(true, Ordering::Relaxed);
         }
 
         let custom_scheme = if let Some(attr) = attr.custom_scheme.as_ref() {
@@ -315,6 +313,8 @@ impl<R, W> Runtime<R, W> {
                 }
             }
         }
+
+        RUNTIME_RUNNING.store(true, Ordering::Relaxed);
 
         Ok(Self(Arc::new(IRuntime {
             _r: PhantomData::default(),

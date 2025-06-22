@@ -15,9 +15,10 @@ tokio = { version = "1", features = ["rt"], optional = true }
 
 [dev-dependencies]
 anyhow = "1"
-minifb = "0.28.0"
+wgpu = "25.0.2"
 winit = "0.30.11"
-tokio = { version = "1", features = ["rt-multi-thread"] }
+bytemuck = { version = "1.17", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [build-dependencies]
 anyhow = "1"

@@ -1,4 +1,3 @@
-
 /// Supported event bit flags.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -85,7 +84,12 @@ impl Default for KeyboardScanCodeAdapter {
 }
 
 impl KeyboardScanCodeAdapter {
-    pub fn get_key_event(&mut self, code: u32, ty: KeyEventType, modifiers: EventFlags) -> &KeyEvent {
+    pub fn get_key_event(
+        &mut self,
+        code: u32,
+        ty: KeyEventType,
+        modifiers: EventFlags,
+    ) -> &KeyEvent {
         self.event.ty = ty;
         self.event.modifiers = modifiers;
         self.event.native_key_code = code;

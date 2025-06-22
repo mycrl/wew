@@ -204,7 +204,7 @@ impl WebViewAbstract for NativeWindowWebView {}
 ///
 /// Do not call this function in an asynchronous runtime, such as tokio,
 /// which can lead to unexpected crashes!
-/// 
+///
 /// Enabling the `tokio` feature allows for automatic checking.
 pub fn execute_subprocess() -> bool {
     #[cfg(feature = "tokio")]
