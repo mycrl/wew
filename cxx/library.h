@@ -240,6 +240,8 @@ EXPORT void webview_resize(void *webview, int width, int height);
 
 EXPORT const void *webview_get_window_handle(void *webview);
 
+EXPORT void webview_set_focus(void *webview, bool enable);
+
 #ifdef __cplusplus
 }
 #endif

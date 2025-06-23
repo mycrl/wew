@@ -227,6 +227,7 @@ class IWebView : public CefClient,
                                                                    bool &disable_default_handling) override;
 
     void Close();
+    void SetFocus(bool enable);
     void Resize(int width, int height);
     void SetDevToolsOpenState(bool is_open);
     const void *GetWindowHandle();
