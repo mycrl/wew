@@ -1,0 +1,23 @@
+[package]
+name = "windowless_rendering"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "windowless-rendering"
+path = "./src/main.rs"
+
+[[bin]]
+name = "windowless-rendering-helper"
+path = "./src/helper.rs"
+
+[dependencies]
+anyhow = "1"
+wgpu = "25.0.2"
+winit = { version = "0.30.11", features = ["rwh_06"] }
+bytemuck = { version = "1.17", features = ["derive"] }
+pollster = "0.4"
+wew = { path = "../../" }
+
+[build-dependencies]
+cc = "1.2"

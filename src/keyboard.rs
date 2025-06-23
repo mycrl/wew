@@ -70,7 +70,6 @@ pub fn get_capslock_state() -> bool {
 }
 
 pub struct KeyboardScanCodeAdapter {
-    capslock_state: bool,
     event: KeyEvent,
 }
 
@@ -78,7 +77,6 @@ impl Default for KeyboardScanCodeAdapter {
     fn default() -> Self {
         Self {
             event: unsafe { std::mem::zeroed() },
-            capslock_state: get_capslock_state(),
         }
     }
 }

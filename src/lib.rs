@@ -9,10 +9,10 @@ pub mod sync;
 use std::{
     env::args,
     ffi::{CString, c_char},
-    ptr::null,
+    ptr::{NonNull, null},
 };
 
-use self::runtime::RuntimeAttributesBuilder;
+use self::runtime::{RUNTIME_RUNNING, RuntimeAttributesBuilder};
 
 #[allow(
     dead_code,
@@ -29,14 +29,18 @@ mod sys {
 ///
 /// The creator of this type must ensure that the pointer implementation is
 /// thread-safe.
-struct ThreadSafePointer<T>(*mut T);
+struct ThreadSafePointer<T>(NonNull<T>);
 
 unsafe impl<T> Send for ThreadSafePointer<T> {}
 unsafe impl<T> Sync for ThreadSafePointer<T> {}
 
 impl<T> ThreadSafePointer<T> {
+    fn new(ptr: *mut T) -> Self {
+        Self(NonNull::new(ptr).unwrap())
+    }
+
     fn as_ptr(&self) -> *mut T {
-        self.0
+        self.0.as_ptr()
     }
 }
 
@@ -169,7 +173,11 @@ impl MessagePumpLoop {
     /// Note that this function won't block the current thread, external code
     /// needs to drive the message loop pump.
     pub fn poll(&self) {
-        unsafe { sys::poll_message_loop() }
+        use std::sync::atomic::Ordering;
+
+        if RUNTIME_RUNNING.load(Ordering::Relaxed) {
+            unsafe { sys::poll_message_loop() }
+        }
     }
 }
 

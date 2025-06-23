@@ -36,70 +36,70 @@ class IWebView : public CefClient,
     ///
     /// Called before a context menu is displayed.
     ///
-    virtual void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
-                                     CefRefPtr<CefFrame> frame,
-                                     CefRefPtr<CefContextMenuParams> params,
-                                     CefRefPtr<CefMenuModel> model) override;
+    void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                             CefRefPtr<CefFrame> frame,
+                             CefRefPtr<CefContextMenuParams> params,
+                             CefRefPtr<CefMenuModel> model) override;
 
     ///
     /// Called to execute a command selected from the context menu.
     ///
     /// Return true if the command was handled or false for the default implementation.
     ///
-    virtual bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
-                                      CefRefPtr<CefFrame> frame,
-                                      CefRefPtr<CefContextMenuParams> params,
-                                      int command_id,
-                                      EventFlags event_flags) override;
+    bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                              CefRefPtr<CefFrame> frame,
+                              CefRefPtr<CefContextMenuParams> params,
+                              int command_id,
+                              EventFlags event_flags) override;
 
     /* CefClient */
 
     ///
     /// Return the handler for drag events.
     ///
-    virtual CefRefPtr<CefDragHandler> GetDragHandler() override;
+    CefRefPtr<CefDragHandler> GetDragHandler() override;
 
     ///
     /// Return the handler for context menus.
     ///
     /// If no handler is provided the default implementation will be used.
     ///
-    virtual CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override;
+    CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override;
 
     ///
     /// Return the handler for browser display state events.
     ///
-    virtual CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
+    CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
 
     ///
     /// Return the handler for browser life span events.
     ///
-    virtual CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
+    CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
 
     ///
     /// Return the handler for browser load status events.
     ///
-    virtual CefRefPtr<CefLoadHandler> GetLoadHandler() override;
+    CefRefPtr<CefLoadHandler> GetLoadHandler() override;
 
     ///
     /// Return the handler for off-screen rendering events.
     ///
-    virtual CefRefPtr<CefRenderHandler> GetRenderHandler() override;
+    CefRefPtr<CefRenderHandler> GetRenderHandler() override;
 
     ///
     /// Return the handler for browser request events.
     ///
-    virtual CefRefPtr<CefRequestHandler> GetRequestHandler() override;
+    CefRefPtr<CefRequestHandler> GetRequestHandler() override;
 
     ///
     /// Called when a new message is received from a different process.
     ///
     /// Return true if the message was handled or false otherwise.
     ///
-    virtual bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                          CefRefPtr<CefFrame> frame,
-                                          CefProcessId source_process,
-                                          CefRefPtr<CefProcessMessage> message) override;
+    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefProcessId source_process,
+                                  CefRefPtr<CefProcessMessage> message) override;
 
     /* CefLoadHandler */
 
@@ -107,82 +107,80 @@ class IWebView : public CefClient,
     /// Called after a navigation has been committed and before the browser begins
     /// loading contents in the frame.
     ///
-    virtual void OnLoadStart(CefRefPtr<CefBrowser> browser,
-                             CefRefPtr<CefFrame> frame,
-                             TransitionType transition_type) override;
+    void OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type) override;
 
     ///
     /// Called when the browser is done loading a frame.
     ///
-    virtual void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override;
+    void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override;
 
     ///
     /// Called when a navigation fails or is canceled.
     ///
-    virtual void OnLoadError(CefRefPtr<CefBrowser> browser,
-                             CefRefPtr<CefFrame> frame,
-                             ErrorCode error_code,
-                             const CefString &error_text,
-                             const CefString &failed_url) override;
+    void OnLoadError(CefRefPtr<CefBrowser> browser,
+                     CefRefPtr<CefFrame> frame,
+                     ErrorCode error_code,
+                     const CefString &error_text,
+                     const CefString &failed_url) override;
 
     /* CefLifeSpanHandler */
 
     ///
     /// Called after a new browser is created.
     ///
-    virtual void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
+    void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
 
     ///
     /// Called when an Alloy style browser is ready to be closed, meaning that the
     /// close has already been initiated and that JavaScript unload handlers have
     /// already executed or should be ignored.
     ///
-    virtual bool DoClose(CefRefPtr<CefBrowser> browser) override;
+    bool DoClose(CefRefPtr<CefBrowser> browser) override;
 
     ///
     /// Called immediately before the browser object will be destroyed.
     ///
     /// The browser object is no longer valid after this callback returns.
     ///
-    virtual void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
+    void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
 
     ///
     /// Called on the UI thread before a new popup browser is created.
     ///
-    virtual bool OnBeforePopup(CefRefPtr<CefBrowser> browser,
-                               CefRefPtr<CefFrame> frame,
-                               int popup_id,
-                               const CefString &target_url,
-                               const CefString &target_frame_name,
-                               CefLifeSpanHandler::WindowOpenDisposition target_disposition,
-                               bool user_gesture,
-                               const CefPopupFeatures &popupFeatures,
-                               CefWindowInfo &windowInfo,
-                               CefRefPtr<CefClient> &client,
-                               CefBrowserSettings &settings,
-                               CefRefPtr<CefDictionaryValue> &extra_info,
-                               bool *no_javascript_access) override;
+    bool OnBeforePopup(CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefFrame> frame,
+                       int popup_id,
+                       const CefString &target_url,
+                       const CefString &target_frame_name,
+                       CefLifeSpanHandler::WindowOpenDisposition target_disposition,
+                       bool user_gesture,
+                       const CefPopupFeatures &popupFeatures,
+                       CefWindowInfo &windowInfo,
+                       CefRefPtr<CefClient> &client,
+                       CefBrowserSettings &settings,
+                       CefRefPtr<CefDictionaryValue> &extra_info,
+                       bool *no_javascript_access) override;
 
     /* CefDragHandler */
 
     ///
     /// Called when an external drag event enters the browser window.
     ///
-    virtual bool OnDragEnter(CefRefPtr<CefBrowser> browser,
-                             CefRefPtr<CefDragData> dragData,
-                             CefDragHandler::DragOperationsMask mask) override;
+    bool OnDragEnter(CefRefPtr<CefBrowser> browser,
+                     CefRefPtr<CefDragData> dragData,
+                     CefDragHandler::DragOperationsMask mask) override;
 
     /* CefDisplayHandler */
 
     ///
     /// Called when the page title changes.
     ///
-    virtual void OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString &title) override;
+    void OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString &title) override;
 
     ///
     /// Called when web content in the page has toggled fullscreen mode.
     ///
-    virtual void OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen) override;
+    void OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen) override;
 
     /* CefRenderHandler */
 
@@ -190,43 +188,43 @@ class IWebView : public CefClient,
     /// Called to allow the client to fill in the CefScreenInfo object with
     /// appropriate values.
     ///
-    virtual bool GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo &screen_info) override;
+    bool GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo &screen_info) override;
 
     ///
     /// Called when the IME composition range has changed.
     ///
-    virtual void OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
-                                              const CefRange &selected_range,
-                                              const RectList &character_bounds) override;
+    void OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
+                                      const CefRange &selected_range,
+                                      const RectList &character_bounds) override;
 
     ///
     /// Called to retrieve the view rectangle in screen DIP coordinates. This
     /// method must always provide a non-empty rectangle.
     ///
-    virtual void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect) override;
+    void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect) override;
 
     ///
     /// Called when an element should be painted. Pixel values passed to this
     /// method are scaled relative to view coordinates based on the value of
     /// CefScreenInfo.device_scale_factor returned from GetScreenInfo.
     ///
-    virtual void OnPaint(CefRefPtr<CefBrowser> browser,
-                         PaintElementType type,
-                         const RectList &dirtyRects,
-                         const void *buffer,
-                         int width,
-                         int height) override;
+    void OnPaint(CefRefPtr<CefBrowser> browser,
+                 PaintElementType type,
+                 const RectList &dirtyRects,
+                 const void *buffer,
+                 int width,
+                 int height) override;
 
     ///
     /// Called on the browser process IO thread before a resource request is initiated.
     ///
-    virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser> browser,
-                                                                           CefRefPtr<CefFrame> frame,
-                                                                           CefRefPtr<CefRequest> request,
-                                                                           bool is_navigation,
-                                                                           bool is_download,
-                                                                           const CefString &request_initiator,
-                                                                           bool &disable_default_handling) override;
+    CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser> browser,
+                                                                   CefRefPtr<CefFrame> frame,
+                                                                   CefRefPtr<CefRequest> request,
+                                                                   bool is_navigation,
+                                                                   bool is_download,
+                                                                   const CefString &request_initiator,
+                                                                   bool &disable_default_handling) override;
 
     void Close();
     void Resize(int width, int height);

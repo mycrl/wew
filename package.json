@@ -1,0 +1,19 @@
+{
+    "name": "wew",
+    "version": "1.0.0",
+    "description": "",
+    "private": true,
+    "scripts": {
+        "fmt": "cargo +nightly fmt"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/mycrl/wew.git"
+    },
+    "author": "Mr.Panda",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/mycrl/wew/issues"
+    },
+    "homepage": "https://github.com/mycrl/wew#readme"
+}

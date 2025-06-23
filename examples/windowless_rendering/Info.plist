@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+	<dict>
+		<key>CFBundleName</key>
+		<string>Hylarana</string>
+		<key>CFBundleDisplayName</key>
+		<string>Hylarana</string>
+		<key>CFBundleIdentifier</key>
+		<string>com.github.mycrl.hylarana</string>
+		<key>CFBundleVersion</key>
+		<string>1.0.0</string>
+		<key>CFBundleShortVersionString</key>
+		<string>1.0</string>
+		<key>CFBundlePackageType</key>
+		<string>APPL</string>
+		<key>CFBundleExecutable</key>
+		<string>Hylarana</string>
+		<key>LSMinimumSystemVersion</key>
+		<string>15.4</string>
+		<key>NSLocalNetworkUsageDescription</key>
+        <string></string>
+	</dict>
+</plist>

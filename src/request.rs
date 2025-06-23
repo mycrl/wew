@@ -275,8 +275,8 @@ impl CustomRequestHandlerFactory {
         }));
 
         Self(Arc::new(ICustomRequestHandlerFactory {
-            raw: ThreadSafePointer(raw),
-            raw_handler: ThreadSafePointer(raw_handler),
+            raw: ThreadSafePointer::new(raw),
+            raw_handler: ThreadSafePointer::new(raw_handler),
         }))
     }
 

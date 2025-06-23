@@ -33,34 +33,27 @@ class IResourceHandler : public CefResourceHandler
     ///
     /// Open the response stream.
     ///
-    virtual bool Open(CefRefPtr<CefRequest> request, bool &handle_request, CefRefPtr<CefCallback> callback) override;
+    bool Open(CefRefPtr<CefRequest> request, bool &handle_request, CefRefPtr<CefCallback> callback) override;
 
     ///
     /// Retrieve response header information.
     ///
-    virtual void GetResponseHeaders(CefRefPtr<CefResponse> response,
-                                    int64_t &response_length,
-                                    CefString &redirectUrl) override;
+    void GetResponseHeaders(CefRefPtr<CefResponse> response, int64_t &response_length, CefString &redirectUrl) override;
 
     ///
     /// Read response data.
     ///
-    virtual bool Skip(int64_t bytes_to_skip,
-                      int64_t &bytes_skipped,
-                      CefRefPtr<CefResourceSkipCallback> callback) override;
+    bool Skip(int64_t bytes_to_skip, int64_t &bytes_skipped, CefRefPtr<CefResourceSkipCallback> callback) override;
 
     ///
     /// Read response data.
     ///
-    virtual bool Read(void *data_out,
-                      int bytes_to_read,
-                      int &bytes_read,
-                      CefRefPtr<CefResourceReadCallback> callback) override;
+    bool Read(void *data_out, int bytes_to_read, int &bytes_read, CefRefPtr<CefResourceReadCallback> callback) override;
 
     ///
     /// Request processing has been canceled.
     ///
-    virtual void Cancel() override;
+    void Cancel() override;
 
   private:
     RequestHandler *_handler;
@@ -77,10 +70,10 @@ class ISchemeHandlerFactory : public CefSchemeHandlerFactory
     ///
     /// Return a new scheme handler instance to handle the request.
     ///
-    virtual CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser> browser,
-                                                 CefRefPtr<CefFrame> frame,
-                                                 const CefString &scheme_name,
-                                                 CefRefPtr<CefRequest> request) override;
+    CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser> browser,
+                                         CefRefPtr<CefFrame> frame,
+                                         const CefString &scheme_name,
+                                         CefRefPtr<CefRequest> request) override;
 
   private:
     ICustomSchemeAttributes &_attr;
@@ -97,9 +90,9 @@ class IResourceRequestHandler : public CefResourceRequestHandler
     ///
     /// Called on the IO thread before a resource is loaded.
     ///
-    virtual CefRefPtr<CefResourceHandler> GetResourceHandler(CefRefPtr<CefBrowser> browser,
-                                                             CefRefPtr<CefFrame> frame,
-                                                             CefRefPtr<CefRequest> request) override;
+    CefRefPtr<CefResourceHandler> GetResourceHandler(CefRefPtr<CefBrowser> browser,
+                                                     CefRefPtr<CefFrame> frame,
+                                                     CefRefPtr<CefRequest> request) override;
 
   private:
     const RequestHandlerFactory *_factory = nullptr;

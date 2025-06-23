@@ -1,12 +1,10 @@
 use std::{
     ffi::{CStr, CString, c_char, c_int, c_void},
-    num::NonZeroIsize,
     ops::Deref,
-    ptr::{NonNull, null},
+    ptr::null,
 };
 
 use parking_lot::Mutex;
-use raw_window_handle::{AppKitWindowHandle, RawWindowHandle, Win32WindowHandle};
 
 use crate::{
     Error, ThreadSafePointer, WindowlessRenderWebView,
@@ -81,6 +79,21 @@ pub enum IMEAction<'a> {
     Pre(&'a str, i32, i32),
 }
 
+/// Represents a window handle
+pub struct WindowHandle(ThreadSafePointer<c_void>);
+
+impl WindowHandle {
+    /// Create a new window handle
+    pub fn new(value: *const c_void) -> Self {
+        WindowHandle(ThreadSafePointer::new(value as _))
+    }
+
+    /// Get the raw pointer of the window handle
+    pub fn as_ptr(&self) -> *const c_void {
+        self.0.as_ptr()
+    }
+}
+
 #[allow(unused)]
 pub trait WebViewHandler: Send + Sync {
     /// Called when the web page state changes
@@ -121,7 +134,7 @@ pub struct WebViewAttributes {
     /// Request handler factory.
     pub request_handler_factory: Option<CustomRequestHandlerFactory>,
     /// External native window handle.
-    pub window_handle: Option<RawWindowHandle>,
+    pub window_handle: Option<WindowHandle>,
     /// The maximum rate in frames per second (fps).
     pub windowless_frame_rate: u32,
     /// window size width.
@@ -191,7 +204,7 @@ impl WebViewAttributesBuilder {
     /// menus, and other elements. If not provided, the main screen monitor will
     /// be used, and some features that require a parent view may not work
     /// properly.
-    pub fn with_window_handle(mut self, value: RawWindowHandle) -> Self {
+    pub fn with_window_handle(mut self, value: WindowHandle) -> Self {
         self.0.window_handle = Some(value);
         self
     }
@@ -333,12 +346,8 @@ impl<R, W> WebView<R, W> {
             javascript: attr.javascript_enable,
             javascript_access_clipboard: attr.javascript_access_clipboard,
             local_storage: attr.local_storage,
-            window_handle: if let Some(it) = attr.window_handle {
-                match it {
-                    RawWindowHandle::Win32(it) => it.hwnd.get() as _,
-                    RawWindowHandle::AppKit(it) => it.ns_view.as_ptr() as _,
-                    _ => unimplemented!("Unsupported window handle type: {:?}", it),
-                }
+            window_handle: if let Some(it) = &attr.window_handle {
+                it.as_ptr()
             } else {
                 null()
             },
@@ -371,12 +380,12 @@ impl<R, W> WebView<R, W> {
         let raw = if ptr.is_null() {
             return Err(Error::FailedToCreateWebView);
         } else {
-            ThreadSafePointer(ptr)
+            ThreadSafePointer::new(ptr)
         };
 
         Ok(Self {
             mouse_event: Mutex::new(unsafe { std::mem::zeroed() }),
-            handler: ThreadSafePointer(handler),
+            handler: ThreadSafePointer::new(handler),
             raw: Mutex::new(raw),
             runtime,
             attr,
@@ -400,20 +409,12 @@ impl<R, W> WebView<R, W> {
     /// Get the window handle
     ///
     /// This function is used to get the window handle.
-    pub fn window_handle(&self) -> RawWindowHandle {
+    pub fn window_handle(&self) -> Option<WindowHandle> {
         let handle = unsafe { sys::webview_get_window_handle(self.raw.lock().as_ptr()) };
-        if handle.is_null() {
-            panic!("window handle pointer is null!");
-        }
-
-        if cfg!(target_os = "windows") {
-            RawWindowHandle::Win32(Win32WindowHandle::new(
-                NonZeroIsize::new(handle as _).unwrap(),
-            ))
-        } else if cfg!(target_os = "macos") {
-            RawWindowHandle::AppKit(AppKitWindowHandle::new(NonNull::new(handle as _).unwrap()))
+        if !handle.is_null() {
+            Some(WindowHandle::new(handle))
         } else {
-            unimplemented!()
+            None
         }
     }
 
@@ -432,6 +433,8 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn mouse(&self, action: &MouseAction) {
+        use sys::cef_mouse_button_type_t as CefMouseButtonType;
+
         let mut event = self.mouse_event.lock();
 
         match action {
@@ -455,9 +458,9 @@ impl<R> WebView<R, WindowlessRenderWebView> {
                         self.raw.lock().as_ptr(),
                         *event,
                         match button {
-                            MouseButton::Left => sys::cef_mouse_button_type_t::MBT_LEFT,
-                            MouseButton::Middle => sys::cef_mouse_button_type_t::MBT_MIDDLE,
-                            MouseButton::Right => sys::cef_mouse_button_type_t::MBT_RIGHT,
+                            MouseButton::Left => CefMouseButtonType::MBT_LEFT,
+                            MouseButton::Middle => CefMouseButtonType::MBT_MIDDLE,
+                            MouseButton::Right => CefMouseButtonType::MBT_RIGHT,
                         },
                         state == &KeyState::Down,
                     )
@@ -472,6 +475,8 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn keyboard(&self, event: &KeyEvent) {
+        use sys::cef_key_event_type_t as CefKeyEventType;
+
         unsafe {
             sys::webview_keyboard(
                 self.raw.lock().as_ptr(),
@@ -485,10 +490,10 @@ impl<R> WebView<R, WindowlessRenderWebView> {
                     unmodified_character: event.unmodified_character,
                     focus_on_editable_field: event.focus_on_editable_field as i32,
                     type_: match event.ty {
-                        KeyEventType::RawKeyDown => sys::cef_key_event_type_t::KEYEVENT_RAWKEYDOWN,
-                        KeyEventType::KeyDown => sys::cef_key_event_type_t::KEYEVENT_KEYDOWN,
-                        KeyEventType::KeyUp => sys::cef_key_event_type_t::KEYEVENT_KEYUP,
-                        KeyEventType::Char => sys::cef_key_event_type_t::KEYEVENT_CHAR,
+                        KeyEventType::RawKeyDown => CefKeyEventType::KEYEVENT_RAWKEYDOWN,
+                        KeyEventType::KeyDown => CefKeyEventType::KEYEVENT_KEYDOWN,
+                        KeyEventType::KeyUp => CefKeyEventType::KEYEVENT_KEYUP,
+                        KeyEventType::Char => CefKeyEventType::KEYEVENT_CHAR,
                     },
                 },
             )

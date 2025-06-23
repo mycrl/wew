@@ -28,35 +28,10 @@ IWebView::~IWebView()
 
 CefRefPtr<CefDragHandler> IWebView::GetDragHandler()
 {
+    CHECK_REFCOUNTING(nullptr);
+
     return this;
 }
-
-void IWebView::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
-                                   CefRefPtr<CefFrame> frame,
-                                   CefRefPtr<CefContextMenuParams> params,
-                                   CefRefPtr<CefMenuModel> model)
-{
-    if (params->GetTypeFlags() & (CM_TYPEFLAG_SELECTION | CM_TYPEFLAG_EDITABLE))
-    {
-        return;
-    }
-
-    model->Clear();
-}
-
-CefRefPtr<CefContextMenuHandler> IWebView::GetContextMenuHandler()
-{
-    return this;
-}
-
-bool IWebView::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
-                                    CefRefPtr<CefFrame> frame,
-                                    CefRefPtr<CefContextMenuParams> params,
-                                    int command_id,
-                                    EventFlags event_flags)
-{
-    return false;
-};
 
 CefRefPtr<CefDisplayHandler> IWebView::GetDisplayHandler()
 {
@@ -105,6 +80,37 @@ CefRefPtr<CefRequestHandler> IWebView::GetRequestHandler()
     return this;
 }
 
+void IWebView::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                                   CefRefPtr<CefFrame> frame,
+                                   CefRefPtr<CefContextMenuParams> params,
+                                   CefRefPtr<CefMenuModel> model)
+{
+    CHECK_REFCOUNTING();
+
+    if (params->GetTypeFlags() & (CM_TYPEFLAG_SELECTION | CM_TYPEFLAG_EDITABLE))
+    {
+        return;
+    }
+
+    model->Clear();
+}
+
+CefRefPtr<CefContextMenuHandler> IWebView::GetContextMenuHandler()
+{
+    CHECK_REFCOUNTING(nullptr);
+
+    return this;
+}
+
+bool IWebView::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                    CefRefPtr<CefFrame> frame,
+                                    CefRefPtr<CefContextMenuParams> params,
+                                    int command_id,
+                                    EventFlags event_flags)
+{
+    return false;
+};
+
 void IWebView::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type)
 {
     CHECK_REFCOUNTING();
@@ -145,6 +151,8 @@ void IWebView::OnAfterCreated(CefRefPtr<CefBrowser> browser)
 
 bool IWebView::DoClose(CefRefPtr<CefBrowser> browser)
 {
+    CHECK_REFCOUNTING(true);
+
     _handler.on_state_change(WebViewState::RequestClose, _handler.context);
 
     return false;
@@ -164,6 +172,8 @@ bool IWebView::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                              CefRefPtr<CefDictionaryValue> &extra_info,
                              bool *no_javascript_access)
 {
+    CHECK_REFCOUNTING(false);
+
     browser->GetMainFrame()->LoadURL(target_url);
 
     return true;
@@ -182,30 +192,6 @@ void IWebView::OnBeforeClose(CefRefPtr<CefBrowser> browser)
     _browser = std::nullopt;
 }
 
-void IWebView::SetDevToolsOpenState(bool is_open)
-{
-    CHECK_REFCOUNTING();
-
-    if (!_browser.has_value())
-    {
-        return;
-    }
-
-    if (is_open)
-    {
-        _browser.value()->GetHost()->ShowDevTools(CefWindowInfo(), nullptr, CefBrowserSettings(), CefPoint());
-    }
-    else
-    {
-        _browser.value()->GetHost()->CloseDevTools();
-    }
-}
-
-const void *IWebView::GetWindowHandle()
-{
-    return _browser.has_value() ? _browser.value()->GetHost()->GetWindowHandle() : nullptr;
-}
-
 bool IWebView::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                         CefRefPtr<CefFrame> frame,
                                         CefProcessId source_process,
@@ -222,37 +208,6 @@ bool IWebView::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
     std::string payload = args->GetString(0);
     _handler.on_message(payload.c_str(), _handler.context);
     return true;
-}
-
-void IWebView::SendMessage(std::string message)
-{
-    CHECK_REFCOUNTING();
-
-    if (!_browser.has_value())
-    {
-        return;
-    }
-
-    auto msg = CefProcessMessage::Create("MESSAGE_TRANSPORT");
-    CefRefPtr<CefListValue> args = msg->GetArgumentList();
-    args->SetSize(1);
-    args->SetString(0, message);
-    _browser.value()->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
-}
-
-void IWebView::Close()
-{
-    CHECK_REFCOUNTING();
-
-    if (!_browser.has_value())
-    {
-        return;
-    }
-
-    _browser.value()->GetHost()->CloseBrowser(true);
-    _browser = std::nullopt;
-
-    CLOSE_RUNNING;
 }
 
 void IWebView::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString &title)
@@ -329,7 +284,64 @@ bool IWebView::GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo &info)
 
     info.device_scale_factor = _device_scale_factor;
 
-    return false;
+    return true;
+}
+
+void IWebView::SetDevToolsOpenState(bool is_open)
+{
+    CHECK_REFCOUNTING();
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    if (is_open)
+    {
+        _browser.value()->GetHost()->ShowDevTools(CefWindowInfo(), nullptr, CefBrowserSettings(), CefPoint());
+    }
+    else
+    {
+        _browser.value()->GetHost()->CloseDevTools();
+    }
+}
+
+const void *IWebView::GetWindowHandle()
+{
+    CHECK_REFCOUNTING(nullptr);
+
+    return _browser.has_value() ? _browser.value()->GetHost()->GetWindowHandle() : nullptr;
+}
+
+void IWebView::SendMessage(std::string message)
+{
+    CHECK_REFCOUNTING();
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    auto msg = CefProcessMessage::Create("MESSAGE_TRANSPORT");
+    CefRefPtr<CefListValue> args = msg->GetArgumentList();
+    args->SetSize(1);
+    args->SetString(0, message);
+    _browser.value()->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
+}
+
+void IWebView::Close()
+{
+    CHECK_REFCOUNTING();
+
+    if (!_browser.has_value())
+    {
+        return;
+    }
+
+    _browser.value()->GetHost()->CloseBrowser(true);
+    _browser = std::nullopt;
+
+    CLOSE_RUNNING;
 }
 
 void IWebView::OnIMEComposition(std::string input)

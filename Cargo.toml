@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-raw-window-handle = "0.6"
 parking_lot = "0.12"
 url = "2.5.4"
 mime_guess = "2.0.5"
@@ -13,12 +12,6 @@ futures-util = { version = "0.3", optional = true }
 async-trait = { version = "0.1", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
 
-[dev-dependencies]
-anyhow = "1"
-wgpu = "25.0.2"
-winit = "0.30.11"
-bytemuck = { version = "1.17", features = ["derive"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [build-dependencies]
 anyhow = "1"
@@ -30,3 +23,6 @@ default = ["async", "winit", "tokio"]
 async = ["dep:futures-util", "dep:async-trait"]
 tokio = ["dep:tokio"]
 winit = ["dep:winit"]
+
+[workspace]
+members = ["examples/*"]

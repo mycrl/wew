@@ -114,9 +114,17 @@ CefRefPtr<IWebView> IRuntime::CreateWebView(std::string url, const WebViewSettin
             window_info.SetAsChild((CefWindowHandle)(settings->window_handle), rect);
         }
     }
+    else
+    {
+        window_info.SetAsWindowless(nullptr);
+    }
 
     CefRefPtr<IWebView> webview = new IWebView(_cef_settings, settings, handler);
-    CefBrowserHost::CreateBrowser(window_info, webview, url, broswer_settings, nullptr, nullptr);
+    if (!CefBrowserHost::CreateBrowser(window_info, webview, url, broswer_settings, nullptr, nullptr))
+    {
+        return nullptr;
+    }
+
     return webview;
 }
 
@@ -157,7 +165,7 @@ void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler)
     CefString(&cef_settings.locale).FromString("en-US");
 
     cef_settings.no_sandbox = true;
-    // cef_settings.command_line_args_disabled = true;  // 注释掉这行以允许命令行参数传递
+    cef_settings.command_line_args_disabled = true;
     cef_settings.windowless_rendering_enabled = settings->windowless_rendering_enabled;
     cef_settings.multi_threaded_message_loop = settings->multi_threaded_message_loop;
     cef_settings.external_message_pump = settings->external_message_pump;
@@ -186,8 +194,7 @@ void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler)
     }
 #endif
 
-    Runtime *runtime = new Runtime{new IRuntime(settings, cef_settings, handler)};
-    return runtime;
+    return new Runtime{new IRuntime(settings, cef_settings, handler)};
 }
 
 bool execute_runtime(void *runtime, int argc, const char **argv)
@@ -214,7 +221,6 @@ void *create_webview(void *runtime, const char *url, const WebViewSettings *sett
     assert(settings != nullptr);
     assert(url != nullptr);
 
-    auto rt = static_cast<Runtime *>(runtime);
-    WebView *webview = new WebView{rt->ref->CreateWebView(std::string(url), settings, handler)};
-    return webview;
+    auto webview = static_cast<Runtime *>(runtime)->ref->CreateWebView(std::string(url), settings, handler);
+    return new WebView{webview};
 }

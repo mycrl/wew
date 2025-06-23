@@ -17,11 +17,11 @@
 class MessageSender : public CefV8Handler
 {
   public:
-    virtual bool Execute(const CefString &name,
-                         CefRefPtr<CefV8Value> object,
-                         const CefV8ValueList &arguments,
-                         CefRefPtr<CefV8Value> &retval,
-                         CefString &exception) override;
+    bool Execute(const CefString &name,
+                 CefRefPtr<CefV8Value> object,
+                 const CefV8ValueList &arguments,
+                 CefRefPtr<CefV8Value> &retval,
+                 CefString &exception) override;
 
     void SetBrowser(CefRefPtr<CefBrowser> browser)
     {
@@ -37,11 +37,11 @@ class MessageSender : public CefV8Handler
 class MessageReceiver : public CefV8Handler
 {
   public:
-    virtual bool Execute(const CefString &name,
-                         CefRefPtr<CefV8Value> object,
-                         const CefV8ValueList &arguments,
-                         CefRefPtr<CefV8Value> &retval,
-                         CefString &exception) override;
+    bool Execute(const CefString &name,
+                 CefRefPtr<CefV8Value> object,
+                 const CefV8ValueList &arguments,
+                 CefRefPtr<CefV8Value> &retval,
+                 CefString &exception) override;
 
     void Recv(std::string message);
 
@@ -60,7 +60,7 @@ class ISubProcess : public CefApp, public CefRenderProcessHandler
     ///
     /// Provides an opportunity to register custom schemes.
     ///
-    virtual void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
+    void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
 
     ///
     /// Return the handler for functionality specific to the render process.
@@ -72,9 +72,9 @@ class ISubProcess : public CefApp, public CefRenderProcessHandler
     ///
     /// Called immediately after the V8 context for a frame has been created.
     ///
-    virtual void OnContextCreated(CefRefPtr<CefBrowser> browser,
-                                  CefRefPtr<CefFrame> frame,
-                                  CefRefPtr<CefV8Context> context) override;
+    void OnContextCreated(CefRefPtr<CefBrowser> browser,
+                          CefRefPtr<CefFrame> frame,
+                          CefRefPtr<CefV8Context> context) override;
 
     ///
     /// Called when a new message is received from a different process.
@@ -82,10 +82,10 @@ class ISubProcess : public CefApp, public CefRenderProcessHandler
     /// Return true if the message was handled or false otherwise. It is safe to keep a reference to |message| outside
     /// of this callback.
     ///
-    virtual bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                          CefRefPtr<CefFrame> frame,
-                                          CefProcessId source_process,
-                                          CefRefPtr<CefProcessMessage> message) override;
+    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefProcessId source_process,
+                                  CefRefPtr<CefProcessMessage> message) override;
 
   private:
     CefRefPtr<MessageSender> _sender = new MessageSender();

@@ -159,24 +159,54 @@ impl<R, W> RuntimeAttributesBuilder<R, W> {
     }
 }
 
-impl<W> RuntimeAttributesBuilder<MultiThreadMessageLoop, W> {
-    pub fn build(mut self) -> RuntimeAttributes<MultiThreadMessageLoop, W> {
+impl RuntimeAttributesBuilder<MultiThreadMessageLoop, NativeWindowWebView> {
+    pub fn build(mut self) -> RuntimeAttributes<MultiThreadMessageLoop, NativeWindowWebView> {
+        self.0.windowless_rendering_enabled = false;
         self.0.multi_threaded_message_loop = true;
         self.0.external_message_pump = false;
         self.0
     }
 }
 
-impl<W> RuntimeAttributesBuilder<MainThreadMessageLoop, W> {
-    pub fn build(mut self) -> RuntimeAttributes<MainThreadMessageLoop, W> {
+impl RuntimeAttributesBuilder<MainThreadMessageLoop, NativeWindowWebView> {
+    pub fn build(mut self) -> RuntimeAttributes<MainThreadMessageLoop, NativeWindowWebView> {
+        self.0.windowless_rendering_enabled = false;
         self.0.multi_threaded_message_loop = false;
         self.0.external_message_pump = false;
         self.0
     }
 }
 
-impl<W> RuntimeAttributesBuilder<MessagePumpLoop, W> {
-    pub fn build(mut self) -> RuntimeAttributes<MessagePumpLoop, W> {
+impl RuntimeAttributesBuilder<MessagePumpLoop, NativeWindowWebView> {
+    pub fn build(mut self) -> RuntimeAttributes<MessagePumpLoop, NativeWindowWebView> {
+        self.0.windowless_rendering_enabled = false;
+        self.0.multi_threaded_message_loop = false;
+        self.0.external_message_pump = true;
+        self.0
+    }
+}
+
+impl RuntimeAttributesBuilder<MultiThreadMessageLoop, WindowlessRenderWebView> {
+    pub fn build(mut self) -> RuntimeAttributes<MultiThreadMessageLoop, WindowlessRenderWebView> {
+        self.0.windowless_rendering_enabled = true;
+        self.0.multi_threaded_message_loop = true;
+        self.0.external_message_pump = false;
+        self.0
+    }
+}
+
+impl RuntimeAttributesBuilder<MainThreadMessageLoop, WindowlessRenderWebView> {
+    pub fn build(mut self) -> RuntimeAttributes<MainThreadMessageLoop, WindowlessRenderWebView> {
+        self.0.windowless_rendering_enabled = true;
+        self.0.multi_threaded_message_loop = false;
+        self.0.external_message_pump = false;
+        self.0
+    }
+}
+
+impl RuntimeAttributesBuilder<MessagePumpLoop, WindowlessRenderWebView> {
+    pub fn build(mut self) -> RuntimeAttributes<MessagePumpLoop, WindowlessRenderWebView> {
+        self.0.windowless_rendering_enabled = true;
         self.0.multi_threaded_message_loop = false;
         self.0.external_message_pump = true;
         self.0
@@ -213,7 +243,7 @@ pub trait MessagePumpRuntimeHandler: RuntimeHandler {
     fn on_schedule_message_pump_work(&self, delay: u64) {}
 }
 
-static RUNTIME_RUNNING: AtomicBool = AtomicBool::new(false);
+pub(crate) static RUNTIME_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[allow(unused)]
 pub(crate) struct IRuntime<R, W> {
@@ -294,7 +324,7 @@ impl<R, W> Runtime<R, W> {
         let raw = if ptr.is_null() {
             return Err(Error::FailedToCreateRuntime);
         } else {
-            Arc::new(ThreadSafePointer(ptr))
+            Arc::new(ThreadSafePointer::new(ptr))
         };
 
         {
@@ -319,7 +349,7 @@ impl<R, W> Runtime<R, W> {
         Ok(Self(Arc::new(IRuntime {
             _r: PhantomData::default(),
             _w: PhantomData::default(),
-            handler: ThreadSafePointer(handler),
+            handler: ThreadSafePointer::new(handler),
             raw: Mutex::new(raw),
             attr,
         })))

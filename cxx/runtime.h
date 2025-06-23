@@ -31,42 +31,41 @@ class IRuntime : public CefApp, public CefBrowserProcessHandler
     ///
     /// Provides an opportunity to register custom schemes.
     ///
-    virtual void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
+    void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
 
     ///
     /// Return the handler for functionality specific to the browser process.
     ///
     /// This method is called on multiple threads in the browser process.
     ///
-    virtual CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override;
+    CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override;
 
     ///
     /// Provides an opportunity to view and/or modify command-line arguments before processing by CEF and Chromium.
     ///
-    virtual void OnBeforeCommandLineProcessing(const CefString &process_type,
-                                               CefRefPtr<CefCommandLine> command_line) override;
+    void OnBeforeCommandLineProcessing(const CefString &process_type, CefRefPtr<CefCommandLine> command_line) override;
 
     /* CefBrowserProcessHandler */
 
     ///
     /// Called on the browser process UI thread immediately after the CEF context has been initialized.
     ///
-    virtual void OnContextInitialized() override;
+    void OnContextInitialized() override;
 
     ///
     /// Return the default client for use with a newly created browser window (CefBrowser object).
     ///
-    virtual CefRefPtr<CefClient> GetDefaultClient() override;
+    CefRefPtr<CefClient> GetDefaultClient() override;
 
     ///
     /// Called from any thread when work has been scheduled for the browser process main (UI) thread.
     ///
-    virtual void OnScheduleMessagePumpWork(int64_t delay_ms) override;
+    void OnScheduleMessagePumpWork(int64_t delay_ms) override;
 
     ///
     /// Called before a child process is launched.
     ///
-    virtual void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line) override;
+    void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line) override;
 
     CefRefPtr<IWebView> CreateWebView(std::string url, const WebViewSettings *settings, WebViewHandler handler);
     CefSettings &GetCefSettings();
