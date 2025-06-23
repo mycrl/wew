@@ -249,8 +249,9 @@ pub(crate) static RUNTIME_RUNNING: AtomicBool = AtomicBool::new(false);
 pub(crate) struct IRuntime<R, W> {
     _r: PhantomData<R>,
     _w: PhantomData<W>,
+    initialized: Arc<AtomicBool>,
     attr: RuntimeAttributes<R, W>,
-    handler: ThreadSafePointer<MixRuntimeHnadler>,
+    handler: ThreadSafePointer<RuntimeContext>,
     pub(crate) raw: Mutex<Arc<ThreadSafePointer<c_void>>>,
 }
 
@@ -309,7 +310,12 @@ impl<R, W> Runtime<R, W> {
                 .unwrap_or_else(|| null()),
         };
 
-        let handler: *mut MixRuntimeHnadler = Box::into_raw(Box::new(handler));
+        let initialized: Arc<AtomicBool> = Default::default();
+        let handler: *mut RuntimeContext = Box::into_raw(Box::new(RuntimeContext {
+            initialized: initialized.clone(),
+            handler,
+        }));
+
         let ptr = unsafe {
             sys::create_runtime(
                 &options,
@@ -351,6 +357,7 @@ impl<R, W> Runtime<R, W> {
             _w: PhantomData::default(),
             handler: ThreadSafePointer::new(handler),
             raw: Mutex::new(raw),
+            initialized,
             attr,
         })))
     }
@@ -367,6 +374,10 @@ impl<R> Runtime<R, WindowlessRenderWebView> {
         T: WindowlessRenderWebViewHandler + 'static,
         R: Clone,
     {
+        if !self.0.initialized.load(Ordering::Relaxed) {
+            return Err(Error::RuntimeNotInitialization);
+        }
+
         WebView::new(
             self.clone(),
             url,
@@ -387,6 +398,10 @@ impl<R> Runtime<R, NativeWindowWebView> {
         T: WebViewHandler + 'static,
         R: Clone,
     {
+        if !self.0.initialized.load(Ordering::Relaxed) {
+            return Err(Error::RuntimeNotInitialization);
+        }
+
         WebView::new(
             self.clone(),
             url,
@@ -394,6 +409,11 @@ impl<R> Runtime<R, NativeWindowWebView> {
             MixWebviewHnadler::WebViewHandler(Box::new(handler)),
         )
     }
+}
+
+struct RuntimeContext {
+    handler: MixRuntimeHnadler,
+    initialized: Arc<AtomicBool>,
 }
 
 pub(crate) enum MixRuntimeHnadler {
@@ -406,7 +426,11 @@ extern "C" fn on_context_initialized(context: *mut c_void) {
         return;
     }
 
-    match unsafe { &*(context as *mut MixRuntimeHnadler) } {
+    let context = unsafe { &*(context as *mut RuntimeContext) };
+
+    context.initialized.store(true, Ordering::Relaxed);
+
+    match &context.handler {
         MixRuntimeHnadler::RuntimeHandler(handler) => handler.on_context_initialized(),
         MixRuntimeHnadler::MessagePumpRuntimeHandler(handler) => handler.on_context_initialized(),
     }
@@ -417,9 +441,8 @@ extern "C" fn on_schedule_message_pump_work(delay: i64, context: *mut c_void) {
         return;
     }
 
-    if let MixRuntimeHnadler::MessagePumpRuntimeHandler(handler) =
-        unsafe { &*(context as *mut MixRuntimeHnadler) }
-    {
+    let context = unsafe { &*(context as *mut RuntimeContext) };
+    if let MixRuntimeHnadler::MessagePumpRuntimeHandler(handler) = &context.handler {
         handler.on_schedule_message_pump_work(delay as u64);
     }
 }

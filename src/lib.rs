@@ -93,8 +93,9 @@ impl Args {
 #[derive(Debug)]
 pub enum Error {
     FailedToCreateRuntime,
-    FailedToCreateWebView,
     RuntimeAlreadyExists,
+    RuntimeNotInitialization,
+    FailedToCreateWebView,
 }
 
 impl std::error::Error for Error {}

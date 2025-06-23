@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 
 use crate::{
     Error, ThreadSafePointer, WindowlessRenderWebView,
-    keyboard::{KeyEvent, KeyEventType},
+    keyboard::{KeyboardEvent, KeyboardEventType, KeyboardModifiers},
     request::CustomRequestHandlerFactory,
     runtime::Runtime,
     sys,
@@ -23,16 +23,6 @@ pub use self::sys::WebViewState;
 pub struct Position {
     pub x: i32,
     pub y: i32,
-}
-
-/// Represents the state of a key event
-///
-/// This is mainly used for keyboard events and mouse events, and also for touch
-/// events
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum KeyState {
-    Down,
-    Up,
 }
 
 /// Represents a mouse button
@@ -63,7 +53,7 @@ pub enum MouseAction {
     ///
     /// Position is optional, if position is None, it means the mouse is at the
     /// current position
-    Click(MouseButton, KeyState, Option<Position>),
+    Click(MouseButton, bool, Option<Position>),
     /// Move the mouse
     Move(Position),
     /// Scroll the mouse wheel
@@ -447,7 +437,7 @@ impl<R> WebView<R, WindowlessRenderWebView> {
             MouseAction::Wheel(pos) => unsafe {
                 sys::webview_mouse_wheel(self.raw.lock().as_ptr(), *event, pos.x, pos.y)
             },
-            MouseAction::Click(button, state, pos) => {
+            MouseAction::Click(button, is_pressed, pos) => {
                 if let Some(pos) = pos {
                     event.x = pos.x;
                     event.y = pos.y;
@@ -462,7 +452,7 @@ impl<R> WebView<R, WindowlessRenderWebView> {
                             MouseButton::Middle => CefMouseButtonType::MBT_MIDDLE,
                             MouseButton::Right => CefMouseButtonType::MBT_RIGHT,
                         },
-                        state == &KeyState::Down,
+                        *is_pressed,
                     )
                 }
             }
@@ -474,7 +464,8 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     /// This function is used to send keyboard events.
     ///
     /// Note that this function only works in windowless rendering mode.
-    pub fn keyboard(&self, event: &KeyEvent) {
+    pub fn keyboard(&self, event: &KeyboardEvent) {
+        use sys::cef_event_flags_t as CefModifiers;
         use sys::cef_key_event_type_t as CefKeyEventType;
 
         unsafe {
@@ -485,15 +476,20 @@ impl<R> WebView<R, WindowlessRenderWebView> {
                     windows_key_code: event.windows_key_code as i32,
                     native_key_code: event.native_key_code as i32,
                     is_system_key: event.is_system_key as i32,
-                    modifiers: event.modifiers as u32,
+                    modifiers: match event.modifiers {
+                        KeyboardModifiers::Win => CefModifiers::EVENTFLAG_COMMAND_DOWN,
+                        KeyboardModifiers::Shift => CefModifiers::EVENTFLAG_SHIFT_DOWN,
+                        KeyboardModifiers::Ctrl => CefModifiers::EVENTFLAG_CONTROL_DOWN,
+                        KeyboardModifiers::Alt => CefModifiers::EVENTFLAG_ALT_DOWN,
+                        KeyboardModifiers::None => CefModifiers::EVENTFLAG_NONE,
+                    } as u32,
                     character: event.character,
                     unmodified_character: event.unmodified_character,
                     focus_on_editable_field: event.focus_on_editable_field as i32,
                     type_: match event.ty {
-                        KeyEventType::RawKeyDown => CefKeyEventType::KEYEVENT_RAWKEYDOWN,
-                        KeyEventType::KeyDown => CefKeyEventType::KEYEVENT_KEYDOWN,
-                        KeyEventType::KeyUp => CefKeyEventType::KEYEVENT_KEYUP,
-                        KeyEventType::Char => CefKeyEventType::KEYEVENT_CHAR,
+                        KeyboardEventType::KeyDown => CefKeyEventType::KEYEVENT_KEYDOWN,
+                        KeyboardEventType::KeyUp => CefKeyEventType::KEYEVENT_KEYUP,
+                        KeyboardEventType::Char => CefKeyEventType::KEYEVENT_CHAR,
                     },
                 },
             )
@@ -532,6 +528,15 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     /// Note that this function only works in windowless rendering mode.
     pub fn resize(&self, width: u32, height: u32) {
         unsafe { sys::webview_resize(self.raw.lock().as_ptr(), width as c_int, height as c_int) }
+    }
+
+    /// Set the focus state
+    ///
+    /// This function is used to set the focus state.
+    ///
+    /// Note that this function only works in windowless rendering mode.
+    pub fn focus(&self, state: bool) {
+        unsafe { sys::webview_set_focus(self.raw.lock().as_ptr(), state) }
     }
 }
 

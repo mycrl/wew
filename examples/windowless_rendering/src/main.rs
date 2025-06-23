@@ -17,11 +17,13 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-static WIDTH: u32 = 800;
-static HEIGHT: u32 = 600;
+static WIDTH: u32 = 1280;
+static HEIGHT: u32 = 720;
+static URL: &str = "https://keyboard.bmcx.com/";
 
 enum UserEvent {
     RuntimeContextInitialized,
+    RequestRedraw,
 }
 
 struct App {
@@ -71,8 +73,13 @@ impl ApplicationHandler<UserEvent> for App {
                         });
 
                     if let Some(webview) = self.webview.as_mut() {
-                        webview.create_webview(window_handle, render).unwrap();
+                        webview.create_webview(URL, window_handle, render).unwrap();
                     }
+                }
+            }
+            UserEvent::RequestRedraw => {
+                if let Some(window) = self.window.as_ref() {
+                    window.pre_present_notify();
                 }
             }
         }
@@ -87,6 +94,9 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
+            }
+            WindowEvent::RedrawRequested => {
+                self.message_loop.poll();
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 if let Some(webview) = self.webview.as_mut() {
@@ -104,10 +114,13 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                if let MouseScrollDelta::PixelDelta(pos) = delta {
-                    if let Some(webview) = self.webview.as_ref() {
-                        webview.on_mouse_wheel(pos.x as i32, pos.y as i32);
-                    }
+                if let Some(webview) = self.webview.as_ref() {
+                    let (x, y) = match delta {
+                        MouseScrollDelta::PixelDelta(pos) => (pos.x as i32, pos.y as i32),
+                        MouseScrollDelta::LineDelta(x, y) => ((x * 20.0) as i32, (y * 20.0) as i32),
+                    };
+
+                    webview.on_mouse_wheel(x, y);
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -115,12 +128,19 @@ impl ApplicationHandler<UserEvent> for App {
                     webview.on_mouse_move(position.x as i32, position.y as i32);
                 }
             }
+            WindowEvent::Focused(state) => {
+                if let Some(webview) = self.webview.as_ref() {
+                    webview.on_focus(state);
+                }
+            }
             _ => {}
         }
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        self.message_loop.poll();
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
+        }
     }
 }
 
