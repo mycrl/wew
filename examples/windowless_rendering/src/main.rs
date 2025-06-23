@@ -46,6 +46,10 @@ impl App {
 
 impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_some() {
+            return;
+        }
+
         self.window.replace(Arc::new(
             event_loop
                 .create_window(
@@ -145,6 +149,12 @@ impl ApplicationHandler<UserEvent> for App {
 }
 
 fn main() -> Result<()> {
+    if wew::is_subprocess() {
+        wew::execute_subprocess();
+
+        return Ok(());
+    }
+
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
     let event_loop_proxy = Arc::new(event_loop.create_proxy());
 

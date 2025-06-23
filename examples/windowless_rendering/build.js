@@ -95,11 +95,11 @@ void (async () => {
 
         for (const item of [
             [
-                `../../target/debug/target/windowless-rendering.exe`,
+                `../../target/debug/windowless-rendering.exe`,
                 "../../target/windowless_rendering/windowless-rendering.exe",
             ],
             [
-                `../../target/debug/examples/windowless-rendering-helper.exe`,
+                `../../target/debug/windowless-rendering-helper.exe`,
                 "../../target/windowless_rendering/windowless-rendering-helper.exe",
             ],
             [`${cefOutDir}/Release`, "../../target/windowless_rendering/"],

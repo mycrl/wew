@@ -1,3 +1,7 @@
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetKeyState, MAPVK_VSC_TO_VK, MapVirtualKeyA, VK_CAPITAL,
+};
+
 #[cfg(feature = "winit")]
 use winit::{
     event::KeyEvent,
@@ -53,6 +57,11 @@ pub struct KeyboardEvent {
     pub focus_on_editable_field: bool,
 }
 
+#[cfg(target_os = "windows")]
+pub fn get_capslock_state() -> bool {
+    (unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 0x0001) != 0
+}
+
 #[cfg(feature = "winit")]
 pub struct WinitKeyboardAdapter;
 
@@ -83,6 +92,19 @@ impl WinitKeyboardAdapter {
                 if let Some(character) = text.chars().next() {
                     event.unmodified_character = character as u16;
                     event.character = character as u16;
+                }
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                event.windows_key_code =
+                    unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK) };
+
+                if event.native_key_code >= 0x10
+                    && event.native_key_code <= 0x37
+                    && event.native_key_code != 28
+                {
+                    event.windows_key_code += 32;
                 }
             }
 
