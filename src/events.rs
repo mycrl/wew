@@ -144,6 +144,12 @@ impl EventAdapter {
 }
 
 impl EventAdapter {
+    const SCANCODE_LSHIFT: u32 = 42;
+    const SCANCODE_RSHIFT: u32 = 54;
+    const SCANCODE_LCTRL: u32 = 29;
+    const SCANCODE_ENTER: u32 = 28;
+    const SCANCODE_SPACE: u32 = 57;
+
     #[cfg(feature = "winit")]
     pub fn on_winit_window_event<R>(
         &mut self,
@@ -152,7 +158,7 @@ impl EventAdapter {
     ) {
         use winit::{
             event::{Ime, MouseButton as WtMouseButton, MouseScrollDelta, WindowEvent},
-            keyboard::{Key, ModifiersState, NativeKeyCode, PhysicalKey},
+            keyboard::{Key, KeyCode, ModifiersState, NativeKeyCode, PhysicalKey},
             platform::scancode::PhysicalKeyExtScancode,
         };
 
@@ -211,6 +217,14 @@ impl EventAdapter {
                 }
             }
             WindowEvent::KeyboardInput { event: input, .. } => {
+                {
+                    if !input.state.is_pressed() {
+                        if let PhysicalKey::Code(KeyCode::CapsLock) = input.physical_key {
+                            self.modifiers |= KeyboardModifiers::CapsLock;
+                        }
+                    }
+                }
+
                 if self.allow_ime {
                     return;
                 }
@@ -238,12 +252,6 @@ impl EventAdapter {
                     },
                 };
 
-                #[cfg(target_os = "windows")]
-                {
-                    event.windows_key_code =
-                            unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK_EX) };
-                }
-
                 if let Some(text) = input.text.as_ref().or_else(|| {
                     if let Key::Character(text) = &input.logical_key {
                         Some(text)
@@ -257,58 +265,55 @@ impl EventAdapter {
                     }
                 }
 
+                #[cfg(target_os = "windows")]
+                {
+                    event.windows_key_code =
+                        unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK_EX) };
+                }
+
                 webview.keyboard(&event);
 
                 // When the key is pressed, an additional `char` event must be sent.
                 if input.state.is_pressed() {
-                    if cfg!(target_os = "windows") {
-                        if let Some((_, (base, upcase))) = [
-                            (2, ('1', '!')),
-                            (3, ('2', '@')),
-                            (4, ('3', '#')),
-                            (5, ('4', '$')),
-                            (6, ('5', '%')),
-                            (7, ('6', '^')),
-                            (8, ('7', '&')),
-                            (9, ('8', '*')),
-                            (10, ('9', '(')),
-                            (11, ('0', ')')),
-                            (12, ('-', '_')),
-                            (13, ('=', '+')),
-                            (26, ('[', '(')),
-                            (27, (']', ')')),
-                            (39, (';', ':')),
-                            (40, ('\'', '"')),
-                            (41, ('`', '~')),
-                            (43, ('\\', '|')),
-                            (51, (',', '<')),
-                            (52, ('.', '>')),
-                            (53, ('/', '?')),
-                        ]
-                        .iter()
-                        .find(|(code, _)| code == &event.native_key_code)
-                        {
-                            event.windows_key_code =
-                                if self.modifiers.contains(KeyboardModifiers::Shift) {
-                                    *upcase as u32
-                                } else {
-                                    *base as u32
-                                };
-                        } else {
-                            
+                    event.ty = KeyboardEventType::Char;
 
-                            if !self.modifiers.contains(KeyboardModifiers::CapsLock) && {
-                                // a - z
-                                event.windows_key_code >= 0x41 && event.windows_key_code <= 0x5A
-                            } {
+                    if cfg!(not(target_os = "windows")) {
+                        webview.keyboard(&event);
+                    } else {
+                        if event.native_key_code != Self::SCANCODE_LSHIFT
+                            && event.native_key_code != Self::SCANCODE_RSHIFT
+                            && event.native_key_code != Self::SCANCODE_LCTRL
+                        {
+                            let is_ascii =
+                                event.native_key_code >= 0x10 && event.native_key_code <= 0x37;
+
+                            if !self.modifiers.contains(KeyboardModifiers::CapsLock)
+                                && is_ascii
+                                && event.native_key_code != Self::SCANCODE_ENTER
+                            {
                                 event.windows_key_code += 32;
+                            }
+
+                            let mut is_number_symbol = false;
+                            if let Some(mapping) = event.native_key_code.symbol_mapping() {
+                                is_number_symbol = true;
+
+                                event.windows_key_code =
+                                    if self.modifiers.contains(KeyboardModifiers::Shift) {
+                                        mapping.upcase as u32
+                                    } else {
+                                        mapping.base as u32
+                                    };
+                            }
+
+                            if is_number_symbol
+                                || is_ascii
+                                || event.native_key_code == Self::SCANCODE_SPACE
+                            {
+                                webview.keyboard(&event);
                             }
                         }
                     }
-
-                    event.ty = KeyboardEventType::Char;
-
-                    webview.keyboard(&event);
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -347,5 +352,173 @@ impl EventAdapter {
             }
             _ => {}
         }
+    }
+}
+
+struct SymbolMapping {
+    base: char,
+    upcase: char,
+}
+
+trait Win32ScanCodeCapsLockExt {
+    fn symbol_mapping(&self) -> Option<&SymbolMapping>;
+}
+
+static SCANCODE_SYMBOL_MAPPING: &[(u32, SymbolMapping)] = &[
+    (
+        2,
+        SymbolMapping {
+            base: '1',
+            upcase: '!',
+        },
+    ),
+    (
+        3,
+        SymbolMapping {
+            base: '2',
+            upcase: '@',
+        },
+    ),
+    (
+        4,
+        SymbolMapping {
+            base: '3',
+            upcase: '#',
+        },
+    ),
+    (
+        5,
+        SymbolMapping {
+            base: '4',
+            upcase: '$',
+        },
+    ),
+    (
+        6,
+        SymbolMapping {
+            base: '5',
+            upcase: '%',
+        },
+    ),
+    (
+        7,
+        SymbolMapping {
+            base: '6',
+            upcase: '^',
+        },
+    ),
+    (
+        8,
+        SymbolMapping {
+            base: '7',
+            upcase: '&',
+        },
+    ),
+    (
+        9,
+        SymbolMapping {
+            base: '8',
+            upcase: '*',
+        },
+    ),
+    (
+        10,
+        SymbolMapping {
+            base: '9',
+            upcase: '(',
+        },
+    ),
+    (
+        11,
+        SymbolMapping {
+            base: '0',
+            upcase: ')',
+        },
+    ),
+    (
+        12,
+        SymbolMapping {
+            base: '-',
+            upcase: '_',
+        },
+    ),
+    (
+        13,
+        SymbolMapping {
+            base: '=',
+            upcase: '+',
+        },
+    ),
+    (
+        26,
+        SymbolMapping {
+            base: '[',
+            upcase: '(',
+        },
+    ),
+    (
+        27,
+        SymbolMapping {
+            base: ']',
+            upcase: ')',
+        },
+    ),
+    (
+        39,
+        SymbolMapping {
+            base: ';',
+            upcase: ':',
+        },
+    ),
+    (
+        40,
+        SymbolMapping {
+            base: '\'',
+            upcase: '"',
+        },
+    ),
+    (
+        41,
+        SymbolMapping {
+            base: '`',
+            upcase: '~',
+        },
+    ),
+    (
+        43,
+        SymbolMapping {
+            base: '\\',
+            upcase: '|',
+        },
+    ),
+    (
+        51,
+        SymbolMapping {
+            base: ',',
+            upcase: '<',
+        },
+    ),
+    (
+        52,
+        SymbolMapping {
+            base: '.',
+            upcase: '>',
+        },
+    ),
+    (
+        53,
+        SymbolMapping {
+            base: '/',
+            upcase: '?',
+        },
+    ),
+];
+
+impl Win32ScanCodeCapsLockExt for u32 {
+    fn symbol_mapping(&self) -> Option<&SymbolMapping> {
+        SCANCODE_SYMBOL_MAPPING
+            .iter()
+            .find(|(code, _)| code == self)
+            .map(|(_, mapping)| mapping)
     }
 }
