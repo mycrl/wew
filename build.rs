@@ -230,10 +230,6 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=./cxx");
     println!("cargo:rerun-if-changed=./build.rs");
 
-    if std::env::var("DOCS_RS").is_ok() {
-        return Ok(());
-    }
-
     let outdir = env::var("OUT_DIR")?;
     let cef_dir: &str = &join(&outdir, "./cef");
 
@@ -241,11 +237,16 @@ fn main() -> Result<()> {
         download_cef(&outdir)?;
     }
 
+    make_bindgen(&outdir, cef_dir)?;
+
+    if std::env::var("DOCS_RS").is_ok() {
+        return Ok(());
+    }
+
     if !fs::exists(&join(cef_dir, "./libcef_dll_wrapper")).unwrap_or(false) {
         make_cef(cef_dir)?;
     }
 
-    make_bindgen(&outdir, cef_dir)?;
     make_library(&outdir, cef_dir)?;
 
     println!("cargo:rustc-link-lib=static=wew-sys");
