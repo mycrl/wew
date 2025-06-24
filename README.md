@@ -23,7 +23,7 @@ Wew is a cross-platform WebView rendering library based on [Chromium Embedded Fr
 
 ## Usage
 
-Please note that due to CEF's packaging method, it cannot be integrated with Cargo. The CEF runtime requires many resource files and executables to be placed together, and on macOS, it also needs to follow strict and specific packaging requirements that Cargo cannot handle. Therefore, using it currently requires extensive manual operations or writing custom scripts to automate the process. You can refer to the `[windowless_rendering](./examples/windowless_rendering)` example to understand how to package your application.
+Please note that due to CEF's packaging method, it cannot be integrated with Cargo. The CEF runtime requires many resource files and executables to be placed together, and on macOS, it also needs to follow strict and specific packaging requirements that Cargo cannot handle. Therefore, using it currently requires extensive manual operations or writing custom scripts to automate the process. You can refer to the [windowless_rendering](./examples/windowless_rendering) example to understand how to package your application.
 
 ## License
 
