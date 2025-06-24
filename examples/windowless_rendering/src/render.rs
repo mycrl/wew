@@ -3,7 +3,9 @@ use std::{borrow::Cow, sync::Arc};
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt}, wgt::SurfaceConfiguration, *
+    util::{BufferInitDescriptor, DeviceExt},
+    wgt::SurfaceConfiguration,
+    *,
 };
 
 use winit::window::Window;
@@ -123,7 +125,7 @@ impl Render {
             surface_config.format = TextureFormat::Bgra8Unorm;
             surface_config.alpha_mode = CompositeAlphaMode::Opaque;
             surface_config.usage = TextureUsages::RENDER_ATTACHMENT;
-        
+
             &surface_config
         });
 
@@ -296,7 +298,7 @@ impl Render {
                 aspect: TextureAspect::All,
                 ..Default::default()
             });
-    
+
             self.bind_group = self.device.create_bind_group(&BindGroupDescriptor {
                 label: None,
                 layout: &self.bind_group_layout,

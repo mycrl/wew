@@ -2,6 +2,14 @@
 name = "wew"
 version = "0.1.0"
 edition = "2024"
+authors = ["mycrl <lepidodendraceae@gmail.com>"]
+description = "Cross-platform WebView rendering library for rust."
+readme = "./README.md"
+homepage = "https://github.com/mycrl/wew"
+repository = "https://github.com/mycrl/wew"
+license = "MIT"
+keywords = ["webview", "cef"]
+categories = ["gui"]
 
 [dependencies]
 bitflags = "2.9.1"
@@ -21,6 +29,7 @@ windows = { version = "0.60.0", features = [
 
 [build-dependencies]
 anyhow = "1"
+which = "6.0"
 bindgen = "0.72.0"
 cc = { version = "1.2.27", features = ["parallel"] }
 

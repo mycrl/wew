@@ -1,6 +1,7 @@
 use std::{env, fs, path::Path, process::Command};
 
 use anyhow::{Result, anyhow};
+use which::which;
 
 fn join(root: &str, next: &str) -> String {
     Path::new(root).join(next).to_str().unwrap().to_string()
@@ -123,6 +124,14 @@ fn download_cef(outdir: &str) -> Result<()> {
 }
 
 fn make_cef(cef_dir: &str) -> Result<()> {
+    if which("cmake").is_err() {
+        panic!("
+            You don't have cmake installed, compiling srt requires cmake to do it, now it's unavoidable, you need to install cmake.
+                On debian/ubuntu, you can install it with `sudo apt install cmake`.
+                On window, it requires you to go to the official cmake website to load the installation file.
+        ");
+    }
+
     exec(
         &format!(
             "cmake {} -DCMAKE_BUILD_TYPE=Release .",

@@ -1,7 +1,8 @@
 use std::{
     env::current_exe,
     sync::{
-        mpsc::{channel, Sender}, Arc,
+        Arc,
+        mpsc::{Sender, channel},
     },
     thread,
     time::Duration,

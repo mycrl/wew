@@ -1,3 +1,36 @@
+//!
+//! ## Communication with Web Pages
+//!
+//! This library's runtime will inject a global object into web pages for
+//! communication between Rust and web pages.
+//!
+//! ```typescript
+//! declare global {
+//!     interface Window {
+//!         MessageTransport: {
+//!             on: (handle: (message: string) => void) => void;
+//!             send: (message: string) => void;
+//!         };
+//!     }
+//! }
+//! ```
+//!
+//! Usage example:
+//!
+//! ```typescript
+//! window.MessageTransport.on((message: string) => {
+//!     console.log("Received message from Rust:", message);
+//! });
+//!
+//! window.MessageTransport.send("Send message to Rust");
+//! ```
+//!
+//! `WebViewHandler::on_message` is used to receive messages sent by
+//! `MessageTransport.send`, while `MessageTransport.on` is used to receive
+//! messages sent by `WebView::send_message`. Sending and receiving messages are
+//! full-duplex and asynchronous.
+//! 
+
 use std::{
     ffi::{CStr, CString, c_char, c_int, c_void},
     ops::Deref,
