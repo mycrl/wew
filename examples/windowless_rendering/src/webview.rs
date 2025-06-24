@@ -108,19 +108,18 @@ impl Webview {
 
         if cfg!(target_os = "macos") {
             runtime_attributes_builder = runtime_attributes_builder
-                // .with_browser_subprocess_path(
-                //     &join_with_current_dir(
-                //         if cfg!(target_os = "windows") {
-                //             "hylarana-app-helper.exe"
-                //         } else if cfg!(target_os = "macos") {
-                //             "../Frameworks/windowless-rendering
-                // Helper.app/Contents/MacOS/windowless-rendering Helper"
-                //         } else {
-                //             unimplemented!()
-                //         }
-                //     )
-                //     .unwrap(),
-                // )
+                .with_browser_subprocess_path(
+                    &join_with_current_dir(
+                        if cfg!(target_os = "windows") {
+                            "hylarana-app-helper.exe"
+                        } else if cfg!(target_os = "macos") {
+                            "../Frameworks/windowless-rendering Helper.app/Contents/MacOS/windowless-rendering Helper"
+                        } else {
+                            unimplemented!()
+                        }
+                    )
+                    .unwrap(),
+                )
                 .with_cache_dir_path(option_env!("CACHE_PATH").unwrap());
         }
 

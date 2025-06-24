@@ -3,9 +3,6 @@ pub mod request;
 pub mod runtime;
 pub mod webview;
 
-#[cfg(feature = "async")]
-pub mod sync;
-
 use std::{
     env::args,
     ffi::{CString, c_char},

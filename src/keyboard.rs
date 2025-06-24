@@ -1,3 +1,4 @@
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, MAPVK_VSC_TO_VK, MapVirtualKeyA, VK_CAPITAL,
 };
@@ -97,14 +98,8 @@ impl WinitKeyboardAdapter {
 
             #[cfg(target_os = "windows")]
             {
-                event.windows_key_code =
-                    unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK) };
-
-                if event.native_key_code >= 0x10
-                    && event.native_key_code <= 0x37
-                    && event.native_key_code != 28
-                {
-                    event.windows_key_code += 32;
+                unsafe {
+                    event.windows_key_code = MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK);
                 }
             }
 

@@ -416,27 +416,7 @@ void IWebView::OnKeyboard(cef_key_event_t event)
         return;
     }
 
-    CefKeyEvent cef_event;
-    cef_event.type = event.type;
-    cef_event.modifiers = event.modifiers;
-    cef_event.windows_key_code = event.windows_key_code;
-    cef_event.native_key_code = event.native_key_code;
-    cef_event.is_system_key = event.is_system_key;
-    cef_event.character = event.character;
-    cef_event.unmodified_character = event.unmodified_character;
-    cef_event.focus_on_editable_field = event.focus_on_editable_field;
-
-    printf("OnKeyboard ================================\n");
-    printf("OnKeyboard type: %d\n", cef_event.type);
-    printf("OnKeyboard modifiers: %d\n", cef_event.modifiers);
-    printf("OnKeyboard windows_key_code: %d\n", cef_event.windows_key_code);
-    printf("OnKeyboard native_key_code: %d\n", cef_event.native_key_code);
-    printf("OnKeyboard is_system_key: %d\n", cef_event.is_system_key);
-    printf("OnKeyboard character: %d\n", cef_event.character);
-    printf("OnKeyboard unmodified_character: %d\n", cef_event.unmodified_character);
-    printf("OnKeyboard focus_on_editable_field: %d\n", cef_event.focus_on_editable_field);
-
-    _browser.value()->GetHost()->SendKeyEvent(cef_event);
+    _browser.value()->GetHost()->SendKeyEvent(event);
 }
 
 void IWebView::OnTouch(cef_touch_event_t event)
