@@ -3,8 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
-    *,
+    util::{BufferInitDescriptor, DeviceExt}, wgt::SurfaceConfiguration, *
 };
 
 use winit::window::Window;
@@ -82,6 +81,7 @@ impl Vertex {
 pub struct Render {
     instance: Instance,
     surface: Surface<'static>,
+    surface_config: SurfaceConfiguration<Vec<TextureFormat>>,
     adapter: Adapter,
     device: Device,
     queue: Queue,
@@ -117,15 +117,15 @@ impl Render {
             })
             .await?;
 
-        {
-            let mut config = surface.get_default_config(&adapter, WIDTH, HEIGHT).unwrap();
-
-            config.present_mode = PresentMode::Immediate;
-            config.format = TextureFormat::Bgra8Unorm;
-            config.alpha_mode = CompositeAlphaMode::Opaque;
-            config.usage = TextureUsages::RENDER_ATTACHMENT;
-            surface.configure(&device, &config);
-        }
+        let mut surface_config = surface.get_default_config(&adapter, WIDTH, HEIGHT).unwrap();
+        surface.configure(&device, {
+            surface_config.present_mode = PresentMode::Immediate;
+            surface_config.format = TextureFormat::Bgra8Unorm;
+            surface_config.alpha_mode = CompositeAlphaMode::Opaque;
+            surface_config.usage = TextureUsages::RENDER_ATTACHMENT;
+        
+            &surface_config
+        });
 
         let texture = device.create_texture(&TextureDescriptor {
             label: None,
@@ -249,6 +249,7 @@ impl Render {
         });
 
         Ok(Self {
+            surface_config,
             pipeline,
             texture,
             vertex_buffer,
@@ -265,7 +266,53 @@ impl Render {
         })
     }
 
-    pub fn render(&self, buffer: &[u8]) {
+    pub fn render(&mut self, buffer: &[u8], width: u32, height: u32) {
+        if width != self.texture.width() || height != self.texture.height() {
+            self.surface.configure(&self.device, {
+                self.surface_config.width = width;
+                self.surface_config.height = height;
+
+                &self.surface_config
+            });
+
+            self.texture = self.device.create_texture(&TextureDescriptor {
+                label: None,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                format: TextureFormat::Bgra8Unorm,
+                view_formats: &[],
+                size: Extent3d {
+                    depth_or_array_layers: 1,
+                    width,
+                    height,
+                },
+            });
+
+            self.texture_view = self.texture.create_view(&TextureViewDescriptor {
+                dimension: Some(TextureViewDimension::D2),
+                format: Some(TextureFormat::Bgra8Unorm),
+                aspect: TextureAspect::All,
+                ..Default::default()
+            });
+    
+            self.bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+                label: None,
+                layout: &self.bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&self.texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            });
+        }
+
         self.queue.write_texture(
             TexelCopyTextureInfo {
                 aspect: TextureAspect::All,

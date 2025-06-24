@@ -123,7 +123,7 @@ pub struct KeyboardEvent {
 #[derive(Default)]
 pub struct EventAdapter {
     modifiers: KeyboardModifiers,
-    allow_ime: bool,
+    ime: bool,
 }
 
 impl EventAdapter {
@@ -165,12 +165,12 @@ impl EventAdapter {
         match event {
             WindowEvent::Ime(ime) => match ime {
                 Ime::Commit(composition) => {
-                    if self.allow_ime {
+                    if self.ime {
                         webview.ime(&IMEAction::Composition(composition));
                     }
                 }
                 Ime::Preedit(preedit, Some((cursor_pos, selection_start))) => {
-                    if self.allow_ime {
+                    if self.ime {
                         webview.ime(&IMEAction::Pre(
                             preedit,
                             *cursor_pos as i32,
@@ -179,15 +179,15 @@ impl EventAdapter {
                     }
                 }
                 Ime::Enabled => {
-                    self.allow_ime = true;
+                    self.ime = true;
                 }
                 Ime::Disabled => {
-                    self.allow_ime = false;
+                    self.ime = false;
                 }
                 _ => (),
             },
             WindowEvent::ModifiersChanged(modifiers) => {
-                if self.allow_ime {
+                if self.ime {
                     return;
                 }
 
@@ -225,7 +225,7 @@ impl EventAdapter {
                     }
                 }
 
-                if self.allow_ime {
+                if self.ime {
                     return;
                 }
 
@@ -349,6 +349,9 @@ impl EventAdapter {
                 if *state && Self::get_capslock_state() {
                     self.modifiers |= KeyboardModifiers::CapsLock;
                 }
+            }
+            WindowEvent::Resized(size) => {
+                webview.resize(size.width, size.height);
             }
             _ => {}
         }

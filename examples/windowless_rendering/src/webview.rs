@@ -1,14 +1,14 @@
 use std::{
     env::current_exe,
     sync::{
-        Arc,
-        mpsc::{Sender, channel},
+        mpsc::{channel, Sender}, Arc,
     },
     thread,
     time::Duration,
 };
 
 use anyhow::Result;
+use parking_lot::Mutex;
 use wew::{
     MessageLoopAbstract, MessagePumpLoop, WindowlessRenderWebView,
     events::{EventAdapter, Rect},
@@ -40,14 +40,14 @@ fn join_with_current_dir(chlid: &str) -> Option<String> {
 
 pub struct WebViewObserver {
     event_loop_proxy: Arc<EventLoopProxy<UserEvent>>,
-    render: Render,
+    render: Mutex<Render>,
 }
 
 impl WebViewHandler for WebViewObserver {}
 
 impl WindowlessRenderWebViewHandler for WebViewObserver {
-    fn on_frame(&self, texture: &[u8], _width: u32, _height: u32) {
-        self.render.render(texture);
+    fn on_frame(&self, texture: &[u8], width: u32, height: u32) {
+        self.render.lock().render(texture, width, height);
     }
 
     fn on_ime_rect(&self, rect: Rect) {
@@ -151,11 +151,9 @@ impl Webview {
                 .build(),
             WebViewObserver {
                 event_loop_proxy: self.event_loop_proxy.clone(),
-                render,
+                render: Mutex::new(render),
             },
         )?;
-
-        webview.focus(true);
 
         self.webview.replace(webview);
         Ok(())

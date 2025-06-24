@@ -147,6 +147,7 @@ void IWebView::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> fram
     CHECK_REFCOUNTING();
 
     _handler.on_state_change(WebViewState::Loaded, _handler.context);
+    browser->GetHost()->SetFocus(true);
 }
 
 void IWebView::OnLoadError(CefRefPtr<CefBrowser> browser,
