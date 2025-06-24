@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyState, MAPVK_VSC_TO_VK, MapVirtualKeyA, VK_CAPITAL,
+    GetKeyState, MAPVK_VSC_TO_VK_EX, MapVirtualKeyA, VK_CAPITAL,
 };
 
 use crate::{WindowlessRenderWebView, webview::WebView};
@@ -241,7 +241,7 @@ impl EventAdapter {
                 #[cfg(target_os = "windows")]
                 {
                     event.windows_key_code =
-                        unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK) };
+                            unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK_EX) };
                 }
 
                 if let Some(text) = input.text.as_ref().or_else(|| {
@@ -261,6 +261,51 @@ impl EventAdapter {
 
                 // When the key is pressed, an additional `char` event must be sent.
                 if input.state.is_pressed() {
+                    if cfg!(target_os = "windows") {
+                        if let Some((_, (base, upcase))) = [
+                            (2, ('1', '!')),
+                            (3, ('2', '@')),
+                            (4, ('3', '#')),
+                            (5, ('4', '$')),
+                            (6, ('5', '%')),
+                            (7, ('6', '^')),
+                            (8, ('7', '&')),
+                            (9, ('8', '*')),
+                            (10, ('9', '(')),
+                            (11, ('0', ')')),
+                            (12, ('-', '_')),
+                            (13, ('=', '+')),
+                            (26, ('[', '(')),
+                            (27, (']', ')')),
+                            (39, (';', ':')),
+                            (40, ('\'', '"')),
+                            (41, ('`', '~')),
+                            (43, ('\\', '|')),
+                            (51, (',', '<')),
+                            (52, ('.', '>')),
+                            (53, ('/', '?')),
+                        ]
+                        .iter()
+                        .find(|(code, _)| code == &event.native_key_code)
+                        {
+                            event.windows_key_code =
+                                if self.modifiers.contains(KeyboardModifiers::Shift) {
+                                    *upcase as u32
+                                } else {
+                                    *base as u32
+                                };
+                        } else {
+                            
+
+                            if !self.modifiers.contains(KeyboardModifiers::CapsLock) && {
+                                // a - z
+                                event.windows_key_code >= 0x41 && event.windows_key_code <= 0x5A
+                            } {
+                                event.windows_key_code += 32;
+                            }
+                        }
+                    }
+
                     event.ty = KeyboardEventType::Char;
 
                     webview.keyboard(&event);

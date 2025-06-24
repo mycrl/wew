@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use crate::{
     CStringExt, Error, ThreadSafePointer, WindowlessRenderWebView,
     events::{
-        IMEAction, KeyboardEvent, KeyboardEventType, KeyboardModifiers, MouseEvent, MouseButton,
+        IMEAction, KeyboardEvent, KeyboardEventType, KeyboardModifiers, MouseButton, MouseEvent,
         Rect,
     },
     request::CustomRequestHandlerFactory,

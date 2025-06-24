@@ -246,26 +246,18 @@ fn main() -> Result<()> {
     {
         println!("cargo:rustc-link-lib=libcef");
         println!("cargo:rustc-link-lib=libcef_dll_wrapper");
-        println!("cargo:rustc-link-lib=delayimp");
-        println!("cargo:rustc-link-lib=winmm");
-        println!("cargo:rustc-link-lib=user32");
-        println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
         println!(
             "cargo:rustc-link-search=all={}",
-            join(cef_path, "./libcef_dll_wrapper/Release")
+            join(cef_dir, "./libcef_dll_wrapper/Release")
         );
 
-        println!(
-            "cargo:rustc-link-search=all={}",
-            join(cef_path, "./Release")
-        );
+        println!("cargo:rustc-link-search=all={}", join(cef_dir, "./Release"));
     }
 
     #[cfg(target_os = "linux")]
     {
         println!("cargo:rustc-link-lib=cef");
         println!("cargo:rustc-link-lib=cef_dll_wrapper");
-        println!("cargo:rustc-link-lib=X11");
     }
 
     #[cfg(target_os = "macos")]
