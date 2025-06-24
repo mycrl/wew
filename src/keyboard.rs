@@ -98,8 +98,14 @@ impl WinitKeyboardAdapter {
 
             #[cfg(target_os = "windows")]
             {
+                let is_capslock_on = get_capslock_state();
+
                 unsafe {
                     event.windows_key_code = MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK);
+                }
+
+                if !is_capslock_on && (event.native_key_code >= 0x10 && event.native_key_code <= 0x37) && event.native_key_code != 28 /* enter */ {
+                    event.windows_key_code += 32;
                 }
             }
 

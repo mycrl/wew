@@ -106,22 +106,20 @@ impl Webview {
         let mut runtime_attributes_builder =
             message_loop.create_runtime_attributes_builder::<WindowlessRenderWebView>();
 
-        if cfg!(target_os = "macos") {
-            runtime_attributes_builder = runtime_attributes_builder
-                .with_browser_subprocess_path(
-                    &join_with_current_dir(
-                        if cfg!(target_os = "windows") {
-                            "hylarana-app-helper.exe"
-                        } else if cfg!(target_os = "macos") {
-                            "../Frameworks/windowless-rendering Helper.app/Contents/MacOS/windowless-rendering Helper"
-                        } else {
-                            unimplemented!()
-                        }
-                    )
-                    .unwrap(),
+        runtime_attributes_builder = runtime_attributes_builder
+            .with_browser_subprocess_path(
+                &join_with_current_dir(
+                    if cfg!(target_os = "windows") {
+                        "./windowless-rendering-helper.exe"
+                    } else if cfg!(target_os = "macos") {
+                        "../Frameworks/windowless-rendering Helper.app/Contents/MacOS/windowless-rendering Helper"
+                    } else {
+                        unimplemented!()
+                    }
                 )
-                .with_cache_dir_path(option_env!("CACHE_PATH").unwrap());
-        }
+                .unwrap(),
+            )
+            .with_cache_dir_path(option_env!("CACHE_PATH").unwrap());
 
         let runtime = runtime_attributes_builder
             .build()
@@ -173,6 +171,8 @@ impl Webview {
     pub fn on_keyboard_input(&mut self, event: &KeyEvent) {
         if let Some(webview) = self.webview.as_ref() {
             for it in WinitKeyboardAdapter::get_key_event(event) {
+                println!("=================== {:#?}", it);
+
                 webview.keyboard(&it);
             }
         }
