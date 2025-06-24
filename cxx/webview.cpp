@@ -26,6 +26,8 @@ IWebView::~IWebView()
     this->Close();
 }
 
+/* CefClient */
+
 CefRefPtr<CefDragHandler> IWebView::GetDragHandler()
 {
     CHECK_REFCOUNTING(nullptr);
@@ -80,6 +82,33 @@ CefRefPtr<CefRequestHandler> IWebView::GetRequestHandler()
     return this;
 }
 
+CefRefPtr<CefContextMenuHandler> IWebView::GetContextMenuHandler()
+{
+    CHECK_REFCOUNTING(nullptr);
+
+    return this;
+}
+
+bool IWebView::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                        CefRefPtr<CefFrame> frame,
+                                        CefProcessId source_process,
+                                        CefRefPtr<CefProcessMessage> message)
+{
+    CHECK_REFCOUNTING(false);
+
+    if (!_browser.has_value())
+    {
+        return false;
+    }
+
+    auto args = message->GetArgumentList();
+    std::string payload = args->GetString(0);
+    _handler.on_message(payload.c_str(), _handler.context);
+    return true;
+}
+
+/* CefContextMenuHandler */
+
 void IWebView::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
                                    CefRefPtr<CefFrame> frame,
                                    CefRefPtr<CefContextMenuParams> params,
@@ -95,13 +124,6 @@ void IWebView::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
     model->Clear();
 }
 
-CefRefPtr<CefContextMenuHandler> IWebView::GetContextMenuHandler()
-{
-    CHECK_REFCOUNTING(nullptr);
-
-    return this;
-}
-
 bool IWebView::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
                                     CefRefPtr<CefFrame> frame,
                                     CefRefPtr<CefContextMenuParams> params,
@@ -110,6 +132,8 @@ bool IWebView::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
 {
     return false;
 };
+
+/* CefLoadHandler */
 
 void IWebView::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type)
 {
@@ -140,6 +164,8 @@ void IWebView::OnLoadError(CefRefPtr<CefBrowser> browser,
         return;
     }
 }
+
+/* CefLifeSpanHandler */
 
 void IWebView::OnAfterCreated(CefRefPtr<CefBrowser> browser)
 {
@@ -179,6 +205,14 @@ bool IWebView::OnBeforePopup(CefRefPtr<CefBrowser> browser,
     return true;
 }
 
+void IWebView::OnBeforeClose(CefRefPtr<CefBrowser> browser)
+{
+    _handler.on_state_change(WebViewState::Close, _handler.context);
+    _browser = std::nullopt;
+}
+
+/* CefDragHandler */
+
 bool IWebView::OnDragEnter(CefRefPtr<CefBrowser> browser,
                            CefRefPtr<CefDragData> dragData,
                            CefDragHandler::DragOperationsMask mask)
@@ -186,29 +220,7 @@ bool IWebView::OnDragEnter(CefRefPtr<CefBrowser> browser,
     return true;
 }
 
-void IWebView::OnBeforeClose(CefRefPtr<CefBrowser> browser)
-{
-    _handler.on_state_change(WebViewState::Close, _handler.context);
-    _browser = std::nullopt;
-}
-
-bool IWebView::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                        CefRefPtr<CefFrame> frame,
-                                        CefProcessId source_process,
-                                        CefRefPtr<CefProcessMessage> message)
-{
-    CHECK_REFCOUNTING(false);
-
-    if (!_browser.has_value())
-    {
-        return false;
-    }
-
-    auto args = message->GetArgumentList();
-    std::string payload = args->GetString(0);
-    _handler.on_message(payload.c_str(), _handler.context);
-    return true;
-}
+/* CefDisplayHandler */
 
 void IWebView::OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString &title)
 {
@@ -224,6 +236,17 @@ void IWebView::OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullsc
 
     _handler.on_fullscreen_change(fullscreen, _handler.context);
 };
+
+/* CefRenderHandler */
+
+bool IWebView::GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo &info)
+{
+    CHECK_REFCOUNTING(false);
+
+    info.device_scale_factor = _device_scale_factor;
+
+    return true;
+}
 
 void IWebView::OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
                                             const CefRange &selected_range,
@@ -265,6 +288,8 @@ void IWebView::OnPaint(CefRefPtr<CefBrowser> browser,
     _handler.on_frame(buffer, width, height, _handler.context);
 }
 
+/* CefRequestHandler */
+
 CefRefPtr<CefResourceRequestHandler> IWebView::GetResourceRequestHandler(CefRefPtr<CefBrowser> browser,
                                                                          CefRefPtr<CefFrame> frame,
                                                                          CefRefPtr<CefRequest> request,
@@ -278,14 +303,7 @@ CefRefPtr<CefResourceRequestHandler> IWebView::GetResourceRequestHandler(CefRefP
     return _resource_request_handler;
 }
 
-bool IWebView::GetScreenInfo(CefRefPtr<CefBrowser> browser, CefScreenInfo &info)
-{
-    CHECK_REFCOUNTING(false);
-
-    info.device_scale_factor = _device_scale_factor;
-
-    return true;
-}
+/* custom impl */
 
 void IWebView::SetDevToolsOpenState(bool is_open)
 {

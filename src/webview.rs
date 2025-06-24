@@ -7,7 +7,7 @@ use std::{
 use parking_lot::Mutex;
 
 use crate::{
-    Error, ThreadSafePointer, WindowlessRenderWebView,
+    CStringExt, Error, ThreadSafePointer, WindowlessRenderWebView,
     events::{
         IMEAction, KeyboardEvent, KeyboardEventType, KeyboardModifiers, MouseAction, MouseButton,
         Rect,
@@ -303,7 +303,7 @@ impl<R, W> WebView<R, W> {
         let ptr = unsafe {
             sys::create_webview(
                 runtime.0.raw.lock().as_ptr(),
-                url.as_c_str().as_ptr(),
+                url.as_raw(),
                 &options,
                 sys::WebViewHandler {
                     on_state_change: Some(on_state_change_callback),
@@ -342,7 +342,7 @@ impl<R, W> WebView<R, W> {
         let message = CString::new(message).unwrap();
 
         unsafe {
-            sys::webview_send_message(self.raw.lock().as_ptr(), message.as_c_str().as_ptr());
+            sys::webview_send_message(self.raw.lock().as_ptr(), message.as_raw());
         }
     }
 
@@ -467,15 +467,10 @@ impl<R> WebView<R, WindowlessRenderWebView> {
 
         match action {
             IMEAction::Composition(_) => unsafe {
-                sys::webview_ime_composition(self.raw.lock().as_ptr(), input.as_c_str().as_ptr())
+                sys::webview_ime_composition(self.raw.lock().as_ptr(), input.as_raw())
             },
             IMEAction::Pre(_, x, y) => unsafe {
-                sys::webview_ime_set_composition(
-                    self.raw.lock().as_ptr(),
-                    input.as_c_str().as_ptr(),
-                    *x,
-                    *y,
-                )
+                sys::webview_ime_set_composition(self.raw.lock().as_ptr(), input.as_raw(), *x, *y)
             },
         }
     }

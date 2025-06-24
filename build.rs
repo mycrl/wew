@@ -1,9 +1,4 @@
-use std::{
-    env,
-    fs::{self, read_dir},
-    path::Path,
-    process::Command,
-};
+use std::{env, fs, path::Path, process::Command};
 
 use anyhow::{Result, anyhow};
 
@@ -186,17 +181,12 @@ fn main() -> Result<()> {
             } else {
                 "-std=c++20"
             })
-            .include(cef_path);
-
-        for item in read_dir("./cxx")? {
-            if let Ok(item) = item {
-                if let Some(name) = item.file_name().to_str() {
-                    if name.ends_with(".cpp") {
-                        compiler.file(format!("./cxx/{}", name));
-                    }
-                }
-            }
-        }
+            .include(cef_path)
+            .file("./cxx/util.cpp")
+            .file("./cxx/runtime.cpp")
+            .file("./cxx/request.cpp")
+            .file("./cxx/subprocess.cpp")
+            .file("./cxx/webview.cpp");
 
         #[cfg(target_os = "windows")]
         compiler

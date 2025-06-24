@@ -288,8 +288,8 @@ impl<R, W> Runtime<R, W> {
 
         let custom_scheme = if let Some(attr) = attr.custom_scheme.as_ref() {
             Some(sys::CustomSchemeAttributes {
-                name: attr.name.as_c_str().as_ptr(),
-                domain: attr.domain.as_c_str().as_ptr(),
+                name: attr.name.as_raw(),
+                domain: attr.domain.as_raw(),
                 factory: attr.handler.as_raw_handler().as_ptr(),
             })
         } else {

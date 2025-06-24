@@ -142,8 +142,8 @@ impl EventAdapter {
     }
 }
 
-#[cfg(feature = "winit")]
 impl EventAdapter {
+    #[cfg(feature = "winit")]
     pub fn on_winit_window_event<R>(
         &mut self,
         webview: &WebView<R, WindowlessRenderWebView>,
@@ -151,7 +151,7 @@ impl EventAdapter {
     ) {
         use winit::{
             event::{Ime, MouseButton as WtMouseButton, MouseScrollDelta, WindowEvent},
-            keyboard::{ModifiersState, NativeKeyCode, PhysicalKey, Key},
+            keyboard::{Key, ModifiersState, NativeKeyCode, PhysicalKey},
             platform::scancode::PhysicalKeyExtScancode,
         };
 
@@ -216,54 +216,53 @@ impl EventAdapter {
 
                 let mut event: KeyboardEvent = unsafe { std::mem::zeroed() };
 
-                {
-                    match input.physical_key {
-                        PhysicalKey::Code(code) => {
-                            if let Some(scancode) = code.to_scancode() {
-                                event.native_key_code = scancode as u32;
+                match input.physical_key {
+                    PhysicalKey::Code(code) => {
+                        if let Some(scancode) = code.to_scancode() {
+                            event.native_key_code = scancode as u32;
+                        }
+                    }
+                    PhysicalKey::Unidentified(code) => {
+                        event.native_key_code = match code {
+                            NativeKeyCode::Windows(code) | NativeKeyCode::MacOS(code) => {
+                                code as u32
                             }
-                        }
-                        PhysicalKey::Unidentified(code) => {
-                            event.native_key_code = match code {
-                                NativeKeyCode::Windows(code) | NativeKeyCode::MacOS(code) => {
-                                    code as u32
-                                }
-                                NativeKeyCode::Xkb(code) => code,
-                                _ => unimplemented!("not supports android platfrom!"),
-                            };
-                        }
+                            NativeKeyCode::Xkb(code) => code,
+                            _ => unimplemented!("not supports android platfrom!"),
+                        };
                     }
-
-                    if let Some(text) = &input.text {
-                        if let Some(character) = text.chars().next() {
-                            event.unmodified_character = character as u16;
-                            event.character = character as u16;
-                        }
-                    } else {
-                        if let Key::Character(text) = &input.logical_key {
-                            if let Some(character) = text.chars().next() {
-                                event.unmodified_character = character as u16;
-                                event.character = character as u16;
-                            }
-                        }
-                    }
-
-                    #[cfg(target_os = "windows")]
-                    {
-                        event.windows_key_code =
-                            unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK) };
-                    }
-
-                    event.modifiers = self.modifiers;
-                    event.ty = if input.state.is_pressed() {
-                        KeyboardEventType::KeyDown
-                    } else {
-                        KeyboardEventType::KeyUp
-                    };
-
-                    webview.keyboard(&event);
                 }
 
+                if let Some(text) = input.text.as_ref().or_else(|| {
+                    if let Key::Character(text) = &input.logical_key {
+                        Some(text)
+                    } else {
+                        None
+                    }
+                }) {
+                    if let Some(character) = text.chars().next() {
+                        event.unmodified_character = character as u16;
+                        event.character = character as u16;
+                    }
+                }
+
+                #[cfg(target_os = "windows")]
+                {
+                    event.windows_key_code =
+                        unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK) };
+                }
+
+                event.focus_on_editable_field = true;
+                event.modifiers = self.modifiers;
+                event.ty = if input.state.is_pressed() {
+                    KeyboardEventType::KeyDown
+                } else {
+                    KeyboardEventType::KeyUp
+                };
+
+                webview.keyboard(&event);
+
+                // When the key is pressed, an additional `char` event must be sent.
                 if input.state.is_pressed() {
                     event.ty = KeyboardEventType::Char;
 
@@ -298,6 +297,8 @@ impl EventAdapter {
             WindowEvent::Focused(state) => {
                 webview.focus(*state);
 
+                // Since events cannot be captured when not in focus, the case
+                // state must be reacquired when refocusing.
                 if *state && Self::get_capslock_state() {
                     self.modifiers |= KeyboardModifiers::CapsLock;
                 }

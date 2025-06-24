@@ -53,6 +53,12 @@ impl CStringExt for Option<CString> {
     }
 }
 
+impl CStringExt for CString {
+    fn as_raw(&self) -> *const c_char {
+        self.as_c_str().as_ptr()
+    }
+}
+
 struct Args {
     #[allow(unused)]
     inner: Vec<CString>,
@@ -68,10 +74,7 @@ impl Default for Args {
             .map(|it| CString::new(it).unwrap())
             .collect::<Vec<_>>();
 
-        let raw = inner
-            .iter()
-            .map(|it| it.as_c_str().as_ptr())
-            .collect::<Vec<_>>();
+        let raw = inner.iter().map(|it| it.as_raw()).collect::<Vec<_>>();
 
         Self { inner, raw }
     }

@@ -215,6 +215,8 @@ class IWebView : public CefClient,
                  int width,
                  int height) override;
 
+    /* CefRequestHandler */
+
     ///
     /// Called on the browser process IO thread before a resource request is initiated.
     ///
@@ -225,6 +227,8 @@ class IWebView : public CefClient,
                                                                    bool is_download,
                                                                    const CefString &request_initiator,
                                                                    bool &disable_default_handling) override;
+
+    /* custom impl */
 
     void Close();
     void SetFocus(bool enable);
