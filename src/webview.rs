@@ -8,66 +8,16 @@ use parking_lot::Mutex;
 
 use crate::{
     Error, ThreadSafePointer, WindowlessRenderWebView,
-    keyboard::{KeyboardEvent, KeyboardEventType, KeyboardModifiers},
+    events::{
+        IMEAction, KeyboardEvent, KeyboardEventType, KeyboardModifiers, MouseAction, MouseButton,
+        Rect,
+    },
     request::CustomRequestHandlerFactory,
     runtime::Runtime,
     sys,
 };
 
 pub use self::sys::WebViewState;
-
-/// Represents a position
-///
-/// This is mainly used for mouse and touch events
-#[derive(Debug, Clone, Copy)]
-pub struct Position {
-    pub x: i32,
-    pub y: i32,
-}
-
-/// Represents a mouse button
-///
-/// This is mainly used for mouse events
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum MouseButton {
-    Left,
-    Middle,
-    Right,
-}
-
-/// Represents a rectangular area
-#[derive(Debug, Clone, Copy)]
-pub struct Rect {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
-}
-
-/// Represents a mouse event
-///
-/// This is mainly used for mouse events
-#[derive(Debug, Clone)]
-pub enum MouseAction {
-    /// Click a mouse button
-    ///
-    /// Position is optional, if position is None, it means the mouse is at the
-    /// current position
-    Click(MouseButton, bool, Option<Position>),
-    /// Move the mouse
-    Move(Position),
-    /// Scroll the mouse wheel
-    Wheel(Position),
-}
-
-/// Represents an IME event
-///
-/// This is mainly used for IME events
-#[derive(Debug)]
-pub enum IMEAction<'a> {
-    Composition(&'a str),
-    Pre(&'a str, i32, i32),
-}
 
 /// Represents a window handle
 pub struct WindowHandle(ThreadSafePointer<c_void>);
@@ -465,26 +415,35 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn keyboard(&self, event: &KeyboardEvent) {
-        use sys::cef_event_flags_t as CefModifiers;
-        use sys::cef_key_event_type_t as CefKeyEventType;
+        use sys::{cef_event_flags_t as CefModifiers, cef_key_event_type_t as CefKeyEventType};
+
+        let mut modifiers = CefModifiers::EVENTFLAG_NONE as u32;
+        for it in KeyboardModifiers::all() {
+            if event.modifiers.contains(it) {
+                modifiers |= match it {
+                    KeyboardModifiers::None => CefModifiers::EVENTFLAG_NONE,
+                    KeyboardModifiers::Win => CefModifiers::EVENTFLAG_COMMAND_DOWN,
+                    KeyboardModifiers::Shift => CefModifiers::EVENTFLAG_SHIFT_DOWN,
+                    KeyboardModifiers::Ctrl => CefModifiers::EVENTFLAG_CONTROL_DOWN,
+                    KeyboardModifiers::Alt => CefModifiers::EVENTFLAG_ALT_DOWN,
+                    KeyboardModifiers::Command => CefModifiers::EVENTFLAG_COMMAND_DOWN,
+                    KeyboardModifiers::CapsLock => CefModifiers::EVENTFLAG_CAPS_LOCK_ON,
+                    _ => CefModifiers::EVENTFLAG_NONE,
+                } as u32;
+            }
+        }
 
         unsafe {
             sys::webview_keyboard(
                 self.raw.lock().as_ptr(),
                 sys::cef_key_event_t {
                     size: std::mem::size_of::<sys::cef_key_event_t>(),
+                    modifiers,
+                    character: event.character,
+                    unmodified_character: event.unmodified_character,
                     windows_key_code: event.windows_key_code as i32,
                     native_key_code: event.native_key_code as i32,
                     is_system_key: event.is_system_key as i32,
-                    modifiers: match event.modifiers {
-                        KeyboardModifiers::Win => CefModifiers::EVENTFLAG_COMMAND_DOWN,
-                        KeyboardModifiers::Shift => CefModifiers::EVENTFLAG_SHIFT_DOWN,
-                        KeyboardModifiers::Ctrl => CefModifiers::EVENTFLAG_CONTROL_DOWN,
-                        KeyboardModifiers::Alt => CefModifiers::EVENTFLAG_ALT_DOWN,
-                        KeyboardModifiers::None => CefModifiers::EVENTFLAG_NONE,
-                    } as u32,
-                    character: event.character,
-                    unmodified_character: event.unmodified_character,
                     focus_on_editable_field: event.focus_on_editable_field as i32,
                     type_: match event.ty {
                         KeyboardEventType::KeyDown => CefKeyEventType::KEYEVENT_KEYDOWN,

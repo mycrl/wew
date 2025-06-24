@@ -11,18 +11,15 @@ use std::{
 use anyhow::Result;
 use wew::{
     MessageLoopAbstract, MessagePumpLoop, WindowlessRenderWebView,
-    keyboard::{KeyboardModifiers, WinitKeyboardAdapter},
+    events::{EventAdapter, Rect},
     runtime::{MessagePumpRuntimeHandler, Runtime, RuntimeHandler},
     webview::{
-        MouseAction, MouseButton, Position, WebView, WebViewAttributesBuilder, WebViewHandler,
-        WindowHandle, WindowlessRenderWebViewHandler,
+        WebView, WebViewAttributesBuilder, WebViewHandler, WindowHandle,
+        WindowlessRenderWebViewHandler,
     },
 };
 
-use winit::{
-    event::{ElementState, KeyEvent, Modifiers, MouseButton as WinitMouseButton},
-    event_loop::EventLoopProxy,
-};
+use winit::{event::WindowEvent, event_loop::EventLoopProxy};
 
 use crate::{HEIGHT, UserEvent, WIDTH, render::Render};
 
@@ -42,6 +39,7 @@ fn join_with_current_dir(chlid: &str) -> Option<String> {
 }
 
 pub struct WebViewObserver {
+    event_loop_proxy: Arc<EventLoopProxy<UserEvent>>,
     render: Render,
 }
 
@@ -50,6 +48,10 @@ impl WebViewHandler for WebViewObserver {}
 impl WindowlessRenderWebViewHandler for WebViewObserver {
     fn on_frame(&self, texture: &[u8], _width: u32, _height: u32) {
         self.render.render(texture);
+    }
+
+    fn on_ime_rect(&self, rect: Rect) {
+        let _ = self.event_loop_proxy.send_event(UserEvent::ImeRect(rect));
     }
 }
 
@@ -95,7 +97,8 @@ pub struct Webview {
     #[allow(unused)]
     runtime: Runtime<MessagePumpLoop, WindowlessRenderWebView>,
     webview: Option<WebView<MessagePumpLoop, WindowlessRenderWebView>>,
-    modifiers: KeyboardModifiers,
+    event_loop_proxy: Arc<EventLoopProxy<UserEvent>>,
+    event_adapter: EventAdapter,
 }
 
 impl Webview {
@@ -123,10 +126,11 @@ impl Webview {
 
         let runtime = runtime_attributes_builder
             .build()
-            .create_runtime(RuntimeObserver::new(event_loop_proxy))?;
+            .create_runtime(RuntimeObserver::new(event_loop_proxy.clone()))?;
 
         Ok(Self {
-            modifiers: KeyboardModifiers::None,
+            event_loop_proxy,
+            event_adapter: EventAdapter::default(),
             webview: None,
             runtime,
         })
@@ -145,7 +149,10 @@ impl Webview {
                 .with_height(HEIGHT)
                 .with_window_handle(window_handle)
                 .build(),
-            WebViewObserver { render },
+            WebViewObserver {
+                event_loop_proxy: self.event_loop_proxy.clone(),
+                render,
+            },
         )?;
 
         webview.focus(true);
@@ -154,59 +161,9 @@ impl Webview {
         Ok(())
     }
 
-    pub fn on_modifiers_change(&mut self, modifiers: &Modifiers) {
-        let state = modifiers.state();
-
-        if state.shift_key() {
-            self.modifiers = KeyboardModifiers::Shift;
-        } else if state.control_key() {
-            self.modifiers = KeyboardModifiers::Ctrl;
-        } else if state.alt_key() {
-            self.modifiers = KeyboardModifiers::Alt;
-        } else {
-            self.modifiers = KeyboardModifiers::None;
-        }
-    }
-
-    pub fn on_keyboard_input(&mut self, event: &KeyEvent) {
+    pub fn on_event(&mut self, event: &WindowEvent) {
         if let Some(webview) = self.webview.as_ref() {
-            for it in WinitKeyboardAdapter::get_key_event(event) {
-                println!("=================== {:#?}", it);
-
-                webview.keyboard(&it);
-            }
-        }
-    }
-
-    pub fn on_mouse_input(&self, state: ElementState, button: WinitMouseButton) {
-        if let Some(webview) = self.webview.as_ref() {
-            webview.mouse(&MouseAction::Click(
-                match button {
-                    WinitMouseButton::Left => MouseButton::Left,
-                    WinitMouseButton::Right => MouseButton::Right,
-                    _ => MouseButton::Middle,
-                },
-                state.is_pressed(),
-                None,
-            ));
-        }
-    }
-
-    pub fn on_mouse_wheel(&self, x: i32, y: i32) {
-        if let Some(webview) = self.webview.as_ref() {
-            webview.mouse(&MouseAction::Wheel(Position { x, y }));
-        }
-    }
-
-    pub fn on_mouse_move(&self, x: i32, y: i32) {
-        if let Some(webview) = self.webview.as_ref() {
-            webview.mouse(&MouseAction::Move(Position { x, y }));
-        }
-    }
-
-    pub fn on_focus(&self, state: bool) {
-        if let Some(webview) = self.webview.as_ref() {
-            webview.focus(state);
+            self.event_adapter.on_winit_window_event(webview, event);
         }
     }
 }
