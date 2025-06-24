@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use crate::{
     CStringExt, Error, ThreadSafePointer, WindowlessRenderWebView,
     events::{
-        IMEAction, KeyboardEvent, KeyboardEventType, KeyboardModifiers, MouseAction, MouseButton,
+        IMEAction, KeyboardEvent, KeyboardEventType, KeyboardModifiers, MouseEvent, MouseButton,
         Rect,
     },
     request::CustomRequestHandlerFactory,
@@ -372,22 +372,22 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     /// This function is used to send mouse events.
     ///
     /// Note that this function only works in windowless rendering mode.
-    pub fn mouse(&self, action: &MouseAction) {
+    pub fn mouse(&self, action: &MouseEvent) {
         use sys::cef_mouse_button_type_t as CefMouseButtonType;
 
         let mut event = self.mouse_event.lock();
 
         match action {
-            MouseAction::Move(pos) => unsafe {
+            MouseEvent::Move(pos) => unsafe {
                 event.x = pos.x;
                 event.y = pos.y;
 
                 sys::webview_mouse_move(self.raw.lock().as_ptr(), *event)
             },
-            MouseAction::Wheel(pos) => unsafe {
+            MouseEvent::Wheel(pos) => unsafe {
                 sys::webview_mouse_wheel(self.raw.lock().as_ptr(), *event, pos.x, pos.y)
             },
-            MouseAction::Click(button, is_pressed, pos) => {
+            MouseEvent::Click(button, is_pressed, pos) => {
                 if let Some(pos) = pos {
                     event.x = pos.x;
                     event.y = pos.y;
