@@ -60,6 +60,29 @@ impl RequestHandler for LocalDiskRequestHandler {
 }
 
 /// This request handler is used to quickly map to the local file system.
+///
+/// Used to quickly map to the local file system when you need to quickly map
+/// static resource files.
+///
+/// ## Example
+///
+/// If your scheme is `webview://localhost`, and the local directory you map is
+/// `/assets`, then the redirect examples are as follows:
+///
+/// ```text
+/// webview://localhost -> /assets/index.html
+/// webview://localhost/index.html -> /assets/index.html
+/// webview://localhost/index.css -> /assets/index.css
+/// webview://localhost/images/a.jpg -> /assets/images/a.jpg
+/// ```
+///
+/// Besides using it for custom schemes, you can also use it for `WebView`
+/// request interception in the `request_handler_factory` of `WebView`.
+///
+/// Because this request handler will always remove the request protocol header
+/// and host, it can be used in different scenarios. For example,
+/// `http://localhost/hello/hello.html` actually uses `hello/hello.html`
+/// internally.
 pub struct RequestHandlerWithLocalDisk {
     root_dir: PathBuf,
 }
@@ -175,7 +198,7 @@ pub trait RequestHandler: Send + Sync {
     /// If reading fails, return `None`, otherwise return `Some(usize)`, and the
     /// returned length is the read length.
     ///
-    /// This method is generally called after the `skip` method.
+    /// This method is generally called after the `open` method.
     fn read(&mut self, buffer: &mut [u8]) -> Option<usize>;
 
     /// Cancel request
@@ -222,6 +245,7 @@ pub trait RequestHandlerFactory: Send + Sync {
     fn request(&self, request: &Request) -> Option<Box<dyn RequestHandler>>;
 }
 
+/// Custom Scheme attributes
 pub struct CustomSchemeAttributes {
     pub(crate) name: CString,
     pub(crate) domain: CString,

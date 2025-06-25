@@ -1,6 +1,13 @@
+/// Used to handle window events.
 pub mod events;
+
+/// Network request related, including implementing custom request interception.
 pub mod request;
+
+/// This module is used to manage the runtime.
 pub mod runtime;
+
+/// `WebView` module and related types.
 pub mod webview;
 
 use std::{
@@ -10,6 +17,9 @@ use std::{
 };
 
 use self::runtime::{RUNTIME_RUNNING, RuntimeAttributesBuilder};
+
+#[cfg(feature = "winit")]
+pub use winit;
 
 #[allow(
     dead_code,
@@ -93,7 +103,11 @@ impl Args {
 #[derive(Debug)]
 pub enum Error {
     FailedToCreateRuntime,
+    /// Only one runtime can be created in a process. Repeated creation will
+    /// trigger this error.
     RuntimeAlreadyExists,
+    /// If the runtime is not initialized, creating WebView and other operations
+    /// will trigger this error.
     RuntimeNotInitialization,
     FailedToCreateWebView,
 }
@@ -106,6 +120,9 @@ impl std::fmt::Display for Error {
     }
 }
 
+/// Message loop abstraction
+///
+/// Message loop abstraction, used to implement different message loop types.
 pub trait MessageLoopAbstract: Default + Clone + Copy {
     /// Create a runtime attributes builder
     ///
@@ -182,6 +199,9 @@ impl MessagePumpLoop {
     }
 }
 
+/// WebView abstraction
+///
+/// WebView abstraction, used to implement different WebView types.
 pub trait WebViewAbstract: Default {}
 
 /// Off-screen rendering mode

@@ -139,14 +139,14 @@ void IWebView::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> fr
 {
     CHECK_REFCOUNTING();
 
-    _handler.on_state_change(WebViewState::BeforeLoad, _handler.context);
+    _handler.on_state_change(WebViewState::WEBVIEW_BEFORE_LOAD, _handler.context);
 }
 
 void IWebView::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode)
 {
     CHECK_REFCOUNTING();
 
-    _handler.on_state_change(WebViewState::Loaded, _handler.context);
+    _handler.on_state_change(WebViewState::WEBVIEW_LOADED, _handler.context);
     browser->GetHost()->SetFocus(true);
 }
 
@@ -158,7 +158,7 @@ void IWebView::OnLoadError(CefRefPtr<CefBrowser> browser,
 {
     CHECK_REFCOUNTING();
 
-    _handler.on_state_change(WebViewState::LoadError, _handler.context);
+    _handler.on_state_change(WebViewState::WEBVIEW_LOAD_ERROR, _handler.context);
 
     if (error_code == ERR_ABORTED)
     {
@@ -180,7 +180,7 @@ bool IWebView::DoClose(CefRefPtr<CefBrowser> browser)
 {
     CHECK_REFCOUNTING(true);
 
-    _handler.on_state_change(WebViewState::RequestClose, _handler.context);
+    _handler.on_state_change(WebViewState::WEBVIEW_REQUEST_CLOSE, _handler.context);
 
     return false;
 }
@@ -208,7 +208,7 @@ bool IWebView::OnBeforePopup(CefRefPtr<CefBrowser> browser,
 
 void IWebView::OnBeforeClose(CefRefPtr<CefBrowser> browser)
 {
-    _handler.on_state_change(WebViewState::Close, _handler.context);
+    _handler.on_state_change(WebViewState::WEBVIEW_CLOSE, _handler.context);
     _browser = std::nullopt;
 }
 
@@ -261,7 +261,14 @@ void IWebView::OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
     }
 
     auto first = character_bounds[0];
-    _handler.on_ime_rect(first, _handler.context);
+
+    Rect rect;
+    rect.x = first.x;
+    rect.y = first.y;
+    rect.width = first.width;
+    rect.height = first.height;
+
+    _handler.on_ime_rect(rect, _handler.context);
 }
 
 void IWebView::GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect)
@@ -486,46 +493,85 @@ void close_webview(void *webview)
     delete view;
 }
 
-void webview_mouse_click(void *webview, cef_mouse_event_t event, cef_mouse_button_type_t button, bool pressed)
+void webview_mouse_click(void *webview, MouseEvent event, MouseButton button, bool pressed)
 {
     assert(webview != nullptr);
 
-    static_cast<WebView *>(webview)->ref->OnMouseClick(event, button, pressed);
+    CefMouseEvent cef_event;
+    cef_event.x = event.x;
+    cef_event.y = event.y;
+    cef_event.modifiers = event.modifiers;
+
+    auto cef_button = static_cast<cef_mouse_button_type_t>(static_cast<int>(button));
+
+    static_cast<WebView *>(webview)->ref->OnMouseClick(cef_event, cef_button, pressed);
 }
 
-void webview_mouse_wheel(void *webview, cef_mouse_event_t event, int x, int y)
+void webview_mouse_wheel(void *webview, MouseEvent event, int x, int y)
 {
     assert(webview != nullptr);
 
-    static_cast<WebView *>(webview)->ref->OnMouseWheel(event, x, y);
+    CefMouseEvent cef_event;
+    cef_event.x = event.x;
+    cef_event.y = event.y;
+    cef_event.modifiers = event.modifiers;
+
+    static_cast<WebView *>(webview)->ref->OnMouseWheel(cef_event, x, y);
 }
 
-void webview_mouse_move(void *webview, cef_mouse_event_t event)
+void webview_mouse_move(void *webview, MouseEvent event)
 {
     assert(webview != nullptr);
 
-    static_cast<WebView *>(webview)->ref->OnMouseMove(event);
+    CefMouseEvent cef_event;
+    cef_event.x = event.x;
+    cef_event.y = event.y;
+    cef_event.modifiers = event.modifiers;
+
+    static_cast<WebView *>(webview)->ref->OnMouseMove(cef_event);
 }
 
-void webview_keyboard(void *webview, cef_key_event_t event)
+void webview_keyboard(void *webview, KeyEvent event)
 {
     assert(webview != nullptr);
 
-    static_cast<WebView *>(webview)->ref->OnKeyboard(event);
+    CefKeyEvent cef_event;
+    cef_event.modifiers = event.modifiers;
+    cef_event.native_key_code = event.native_key_code;
+    cef_event.windows_key_code = event.windows_key_code;
+    cef_event.character = event.character;
+    cef_event.unmodified_character = event.unmodified_character;
+    cef_event.is_system_key = event.is_system_key;
+    cef_event.focus_on_editable_field = event.focus_on_editable_field;
+    cef_event.type = static_cast<cef_key_event_type_t>(static_cast<int>(event.type));
+
+    static_cast<WebView *>(webview)->ref->OnKeyboard(cef_event);
 }
 
-void webview_touch(void *webview, cef_touch_event_t event)
+void webview_touch(void *webview, TouchEvent event)
 {
     assert(webview != nullptr);
 
-    static_cast<WebView *>(webview)->ref->OnTouch(event);
+    CefTouchEvent cef_event;
+    cef_event.id = event.id;
+    cef_event.x = event.x;
+    cef_event.y = event.y;
+    cef_event.radius_x = event.radius_x;
+    cef_event.radius_y = event.radius_y;
+    cef_event.pressure = event.pressure;
+    cef_event.modifiers = event.modifiers;
+    cef_event.rotation_angle = event.rotation_angle;
+    cef_event.type = static_cast<cef_touch_event_type_t>(static_cast<int>(event.type));
+    cef_event.pointer_type = static_cast<cef_pointer_type_t>(static_cast<int>(event.pointer_type));
+
+    static_cast<WebView *>(webview)->ref->OnTouch(cef_event);
 }
 
 void webview_ime_composition(void *webview, const char *input)
 {
     assert(webview != nullptr);
 
-    static_cast<WebView *>(webview)->ref->OnIMEComposition(input);
+    static_cast<WebView *>(webview)->ref->OnIMEComposition(std::string(input));
 }
 
 void webview_ime_set_composition(void *webview, const char *input, int x, int y)

@@ -128,9 +128,9 @@ CefRefPtr<IWebView> IRuntime::CreateWebView(std::string url, const WebViewSettin
     return webview;
 }
 
-cef_resultcode_t get_result_code()
+int get_result_code()
 {
-    return static_cast<cef_resultcode_t>(CefGetExitCode());
+    return CefGetExitCode();
 }
 
 void run_message_loop()

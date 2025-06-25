@@ -5,6 +5,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, MAPVK_VSC_TO_VK_EX, MapVirtualKeyA, VK_CAPITAL,
 };
 
+#[cfg(feature = "winit")]
 use crate::{WindowlessRenderWebView, webview::WebView};
 
 /// Represents a position
@@ -43,7 +44,7 @@ pub enum MouseEvent {
     /// Click a mouse button
     ///
     /// Position is optional, if position is None, it means the mouse is at the
-    /// current position
+    /// last position
     Click(MouseButton, bool, Option<Position>),
     /// Move the mouse
     Move(Position),
@@ -119,6 +120,10 @@ pub struct KeyboardEvent {
     pub focus_on_editable_field: bool,
 }
 
+/// Adapter that automatically handles various external system window events
+///
+/// Used to adapt window events from various external systems, and the adapter
+/// automatically converts and drives the WebView.
 #[allow(unused)]
 #[derive(Default)]
 pub struct EventAdapter {
@@ -129,7 +134,8 @@ pub struct EventAdapter {
 impl EventAdapter {
     /// Get the state of the capslock key
     ///
-    /// This is mainly used for keyboard events
+    /// This method directly calls the operating system API to get the current
+    /// system capslock state.
     pub fn get_capslock_state() -> bool {
         #[allow(unused_mut)]
         let mut state = false;
@@ -143,6 +149,7 @@ impl EventAdapter {
     }
 }
 
+#[cfg(feature = "winit")]
 impl EventAdapter {
     const SCANCODE_LSHIFT: u32 = 42;
     const SCANCODE_RSHIFT: u32 = 54;
@@ -150,7 +157,28 @@ impl EventAdapter {
     const SCANCODE_ENTER: u32 = 28;
     const SCANCODE_SPACE: u32 = 57;
 
-    #[cfg(feature = "winit")]
+    /// Handling window events for `winit`
+    ///
+    /// ## Example
+    ///
+    /// ```ignore
+    /// struct App {
+    ///     webview: WebView<MessagePumpLoop, WindowlessRenderWebView>,
+    ///     event_adapter: EventAdapter,
+    /// }
+    ///
+    /// impl ApplicationHandler for App {
+    ///     fn window_event(
+    ///         &mut self,
+    ///         event_loop: &ActiveEventLoop,
+    ///         _window_id: WindowId,
+    ///         event: WindowEvent,
+    ///     ) {
+    ///         self.event_adapter
+    ///             .on_winit_window_event(&mut self.webview, &event);
+    ///     }
+    /// }
+    /// ```
     pub fn on_winit_window_event<R>(
         &mut self,
         webview: &WebView<R, WindowlessRenderWebView>,
@@ -358,15 +386,18 @@ impl EventAdapter {
     }
 }
 
+#[cfg(feature = "winit")]
 struct SymbolMapping {
     base: char,
     upcase: char,
 }
 
+#[cfg(feature = "winit")]
 trait Win32ScanCodeCapsLockExt {
     fn symbol_mapping(&self) -> Option<&SymbolMapping>;
 }
 
+#[cfg(feature = "winit")]
 static SCANCODE_SYMBOL_MAPPING: &[(u32, SymbolMapping)] = &[
     (
         2,
@@ -517,6 +548,7 @@ static SCANCODE_SYMBOL_MAPPING: &[(u32, SymbolMapping)] = &[
     ),
 ];
 
+#[cfg(feature = "winit")]
 impl Win32ScanCodeCapsLockExt for u32 {
     fn symbol_mapping(&self) -> Option<&SymbolMapping> {
         SCANCODE_SYMBOL_MAPPING

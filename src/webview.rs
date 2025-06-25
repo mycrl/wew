@@ -29,7 +29,6 @@
 //! `MessageTransport.send`, while `MessageTransport.on` is used to receive
 //! messages sent by `WebView::send_message`. Sending and receiving messages are
 //! full-duplex and asynchronous.
-//! 
 
 use std::{
     ffi::{CStr, CString, c_char, c_int, c_void},
@@ -50,7 +49,32 @@ use crate::{
     sys,
 };
 
-pub use self::sys::WebViewState;
+/// Represents the state of a web page
+///
+/// The order of events is as follows:
+///
+/// ```text
+/// BeforeLoad -> Loaded -> RequestClose -> Close
+///          \ -> LoadError -> Loaded -> RequestClose -> Close
+/// ```
+///
+/// Regardless of whether the loading exists an error, the `Loaded` event is
+/// triggered, the difference is that if the loading error occurs, the
+/// `LoadError` event is triggered first.
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum WebViewState {
+    /// The web page is before loading
+    BeforeLoad = 1,
+    /// The web page is loaded
+    Loaded = 2,
+    /// The web page is loading error
+    LoadError = 3,
+    /// The web page is requesting to close
+    RequestClose = 4,
+    /// The web page is closed
+    Close = 5,
+}
 
 /// Represents a window handle
 pub struct WindowHandle(ThreadSafePointer<c_void>);
@@ -67,6 +91,9 @@ impl WindowHandle {
     }
 }
 
+/// WebView handler
+///
+/// This trait is used to handle web view events.
 #[allow(unused)]
 pub trait WebViewHandler: Send + Sync {
     /// Called when the web page state changes
@@ -90,6 +117,9 @@ pub trait WebViewHandler: Send + Sync {
     fn on_message(&self, message: &str) {}
 }
 
+/// Windowless render web view handler
+///
+/// A specific event handler for windowless rendering WebView.
 #[allow(unused)]
 pub trait WindowlessRenderWebViewHandler: WebViewHandler {
     /// Called when the IME composition rectangle changes
@@ -103,6 +133,7 @@ pub trait WindowlessRenderWebViewHandler: WebViewHandler {
     fn on_frame(&self, texture: &[u8], width: u32, height: u32) {}
 }
 
+/// WebView configuration attributes
 pub struct WebViewAttributes {
     /// Request handler factory.
     pub request_handler_factory: Option<CustomRequestHandlerFactory>,
@@ -155,6 +186,7 @@ impl Default for WebViewAttributes {
     }
 }
 
+/// WebView configuration attributes builder
 #[derive(Default)]
 pub struct WebViewAttributesBuilder(WebViewAttributes);
 
@@ -291,11 +323,12 @@ impl Deref for WebViewAttributesBuilder {
     }
 }
 
+/// Represents an opened web page
 #[allow(unused)]
 pub struct WebView<R, W> {
     runtime: Runtime<R, W>,
     attr: WebViewAttributes,
-    mouse_event: Mutex<sys::cef_mouse_event_t>,
+    mouse_event: Mutex<sys::MouseEvent>,
     handler: ThreadSafePointer<MixWebviewHnadler>,
     raw: Mutex<ThreadSafePointer<c_void>>,
 }
@@ -406,7 +439,7 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn mouse(&self, action: &MouseEvent) {
-        use sys::cef_mouse_button_type_t as CefMouseButtonType;
+        use sys::MouseButton as CefMouseButton;
 
         let mut event = self.mouse_event.lock();
 
@@ -431,9 +464,9 @@ impl<R> WebView<R, WindowlessRenderWebView> {
                         self.raw.lock().as_ptr(),
                         *event,
                         match button {
-                            MouseButton::Left => CefMouseButtonType::MBT_LEFT,
-                            MouseButton::Middle => CefMouseButtonType::MBT_MIDDLE,
-                            MouseButton::Right => CefMouseButtonType::MBT_RIGHT,
+                            MouseButton::Left => CefMouseButton::WEBVIEW_MBT_LEFT,
+                            MouseButton::Middle => CefMouseButton::WEBVIEW_MBT_MIDDLE,
+                            MouseButton::Right => CefMouseButton::WEBVIEW_MBT_RIGHT,
                         },
                         *is_pressed,
                     )
@@ -448,20 +481,20 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn keyboard(&self, event: &KeyboardEvent) {
-        use sys::{cef_event_flags_t as CefModifiers, cef_key_event_type_t as CefKeyEventType};
+        use sys::{EventFlags as CefModifiers, KeyEventType as CefKeyEventType};
 
-        let mut modifiers = CefModifiers::EVENTFLAG_NONE as u32;
+        let mut modifiers = CefModifiers::WEBVIEW_EVENTFLAG_NONE as u32;
         for it in KeyboardModifiers::all() {
             if event.modifiers.contains(it) {
                 modifiers |= match it {
-                    KeyboardModifiers::None => CefModifiers::EVENTFLAG_NONE,
-                    KeyboardModifiers::Win => CefModifiers::EVENTFLAG_COMMAND_DOWN,
-                    KeyboardModifiers::Shift => CefModifiers::EVENTFLAG_SHIFT_DOWN,
-                    KeyboardModifiers::Ctrl => CefModifiers::EVENTFLAG_CONTROL_DOWN,
-                    KeyboardModifiers::Alt => CefModifiers::EVENTFLAG_ALT_DOWN,
-                    KeyboardModifiers::Command => CefModifiers::EVENTFLAG_COMMAND_DOWN,
-                    KeyboardModifiers::CapsLock => CefModifiers::EVENTFLAG_CAPS_LOCK_ON,
-                    _ => CefModifiers::EVENTFLAG_NONE,
+                    KeyboardModifiers::None => CefModifiers::WEBVIEW_EVENTFLAG_NONE,
+                    KeyboardModifiers::Win => CefModifiers::WEBVIEW_EVENTFLAG_COMMAND_DOWN,
+                    KeyboardModifiers::Shift => CefModifiers::WEBVIEW_EVENTFLAG_SHIFT_DOWN,
+                    KeyboardModifiers::Ctrl => CefModifiers::WEBVIEW_EVENTFLAG_CONTROL_DOWN,
+                    KeyboardModifiers::Alt => CefModifiers::WEBVIEW_EVENTFLAG_ALT_DOWN,
+                    KeyboardModifiers::Command => CefModifiers::WEBVIEW_EVENTFLAG_COMMAND_DOWN,
+                    KeyboardModifiers::CapsLock => CefModifiers::WEBVIEW_EVENTFLAG_CAPS_LOCK_ON,
+                    _ => CefModifiers::WEBVIEW_EVENTFLAG_NONE,
                 } as u32;
             }
         }
@@ -469,8 +502,7 @@ impl<R> WebView<R, WindowlessRenderWebView> {
         unsafe {
             sys::webview_keyboard(
                 self.raw.lock().as_ptr(),
-                sys::cef_key_event_t {
-                    size: std::mem::size_of::<sys::cef_key_event_t>(),
+                sys::KeyEvent {
                     modifiers,
                     character: event.character,
                     unmodified_character: event.unmodified_character,
@@ -479,9 +511,9 @@ impl<R> WebView<R, WindowlessRenderWebView> {
                     is_system_key: event.is_system_key as i32,
                     focus_on_editable_field: event.focus_on_editable_field as i32,
                     type_: match event.ty {
-                        KeyboardEventType::KeyDown => CefKeyEventType::KEYEVENT_KEYDOWN,
-                        KeyboardEventType::KeyUp => CefKeyEventType::KEYEVENT_KEYUP,
-                        KeyboardEventType::Char => CefKeyEventType::KEYEVENT_CHAR,
+                        KeyboardEventType::KeyDown => CefKeyEventType::WEBVIEW_KEYEVENT_KEYDOWN,
+                        KeyboardEventType::KeyUp => CefKeyEventType::WEBVIEW_KEYEVENT_KEYUP,
+                        KeyboardEventType::Char => CefKeyEventType::WEBVIEW_KEYEVENT_CHAR,
                     },
                 },
             )
@@ -547,6 +579,14 @@ extern "C" fn on_state_change_callback(state: sys::WebViewState, context: *mut c
         return;
     }
 
+    let state = match state {
+        sys::WebViewState::WEBVIEW_BEFORE_LOAD => WebViewState::BeforeLoad,
+        sys::WebViewState::WEBVIEW_LOADED => WebViewState::Loaded,
+        sys::WebViewState::WEBVIEW_LOAD_ERROR => WebViewState::LoadError,
+        sys::WebViewState::WEBVIEW_REQUEST_CLOSE => WebViewState::RequestClose,
+        sys::WebViewState::WEBVIEW_CLOSE => WebViewState::Close,
+    };
+
     match unsafe { &*(context as *mut MixWebviewHnadler) } {
         MixWebviewHnadler::WebViewHandler(handler) => handler.on_state_change(state),
         MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) => {
@@ -555,7 +595,7 @@ extern "C" fn on_state_change_callback(state: sys::WebViewState, context: *mut c
     }
 }
 
-extern "C" fn on_ime_rect_callback(rect: sys::cef_rect_t, context: *mut c_void) {
+extern "C" fn on_ime_rect_callback(rect: sys::Rect, context: *mut c_void) {
     if context.is_null() {
         return;
     }

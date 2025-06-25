@@ -28,12 +28,6 @@ target_link_directories(webview PRIVATE
 						"${THIRD_PARTY_DIR}/cef/${CMAKE_BUILD_TYPE}"
 						"${THIRD_PARTY_DIR}/cef/libcef_dll_wrapper/${CMAKE_BUILD_TYPE}")
 
-target_link_libraries(webview
-					  libcef
-					  libcef_dll_wrapper
-                      cef_sandbox
-                      winmm
-                      delayimp)
 
 if(MSVC)
     add_compile_definitions(WIN32)

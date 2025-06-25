@@ -233,14 +233,14 @@ fn main() -> Result<()> {
     let outdir = env::var("OUT_DIR")?;
     let cef_dir: &str = &join(&outdir, "./cef");
 
-    if !fs::exists(cef_dir).unwrap_or(false) {
-        download_cef(&outdir)?;
-    }
-
     make_bindgen(&outdir, cef_dir)?;
 
     if std::env::var("DOCS_RS").is_ok() {
         return Ok(());
+    }
+
+    if !fs::exists(cef_dir).unwrap_or(false) {
+        download_cef(&outdir)?;
     }
 
     if !fs::exists(&join(cef_dir, "./libcef_dll_wrapper")).unwrap_or(false) {

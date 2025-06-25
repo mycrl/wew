@@ -107,6 +107,7 @@ impl<W> RuntimeAttributes<MessagePumpLoop, W> {
     }
 }
 
+/// Runtime configuration attributes builder
 #[derive(Default)]
 pub struct RuntimeAttributesBuilder<R, W>(RuntimeAttributes<R, W>);
 
@@ -221,6 +222,9 @@ impl<R, W> Deref for RuntimeAttributesBuilder<R, W> {
     }
 }
 
+/// Runtime handler
+///
+/// This trait is used to handle runtime events.
 #[allow(unused_variables)]
 pub trait RuntimeHandler: Send + Sync {
     /// Called when the context is initialized
@@ -233,13 +237,17 @@ pub trait RuntimeHandler: Send + Sync {
     fn on_context_initialized(&self) {}
 }
 
+/// Message pump runtime handler
+///
+/// A runtime specific to the message pump mechanism.
 #[allow(unused_variables)]
 pub trait MessagePumpRuntimeHandler: RuntimeHandler {
     /// Called when scheduling message pump work
     ///
     /// This callback is called when scheduling message pump work.
     ///
-    /// The `delay` parameter indicates how long to wait before calling `poll`.
+    /// The `delay` parameter indicates how long to wait before calling `poll`,
+    /// the unit is milliseconds.
     fn on_schedule_message_pump_work(&self, delay: u64) {}
 }
 
@@ -272,6 +280,9 @@ impl<R, W> Drop for IRuntime<R, W> {
     }
 }
 
+/// Global unique runtime
+///
+/// The runtime is used to manage multi-process models and message loops.
 #[derive(Clone)]
 pub struct Runtime<R, W>(pub(crate) Arc<IRuntime<R, W>>);
 
