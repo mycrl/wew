@@ -79,7 +79,7 @@ impl CStringExt for Option<CString> {
     fn as_raw(&self) -> *const c_char {
         self.as_ref()
             .map(|it| it.as_c_str().as_ptr() as _)
-            .unwrap_or_else(|| null())
+            .unwrap_or_else(null)
     }
 }
 

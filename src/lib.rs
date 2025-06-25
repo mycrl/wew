@@ -193,5 +193,5 @@ pub fn is_subprocess() -> bool {
     // This check is not very strict, but processes with a "type" parameter can
     // generally be considered subprocesses, unless the main process also uses
     // this parameter.
-    std::env::args().find(|it| it.contains("--type")).is_some()
+    std::env::args().any(|it| it.contains("--type"))
 }

@@ -36,7 +36,7 @@ impl RequestHandler for LocalDiskRequestHandler {
     fn get_response(&mut self) -> Option<Response> {
         Some(Response {
             status_code: 200,
-            mime_type: get_mime_type(&self.path.as_path())?,
+            mime_type: get_mime_type(self.path.as_path())?,
             content_length: self.file.as_ref()?.metadata().ok()?.len(),
         })
     }
@@ -51,7 +51,7 @@ impl RequestHandler for LocalDiskRequestHandler {
     }
 
     fn read(&mut self, buffer: &mut [u8]) -> Option<usize> {
-        Some(self.file.as_mut()?.read(buffer).ok()?)
+        self.file.as_mut()?.read(buffer).ok()
     }
 
     fn cancel(&mut self) {
@@ -102,10 +102,10 @@ impl RequestHandlerWithLocalDisk {
 
 impl RequestHandlerFactory for RequestHandlerWithLocalDisk {
     fn request(&self, request: &Request) -> Option<Box<dyn RequestHandler>> {
-        let url = if request.url.len() == 0 {
+        let url = if request.url.is_empty() {
             "http://localhost/index.html"
         } else {
-            &request.url
+            request.url
         };
 
         let mut path = Url::parse(url).ok()?.path().to_string();

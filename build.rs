@@ -162,7 +162,7 @@ fn make_bindgen(outdir: &str, cef_dir: &str) -> Result<()> {
         .clang_arg(format!("-I{}", cef_dir))
         .header("./cxx/library.h")
         .generate()?
-        .write_to_file(&join(outdir, "bindings.rs"))?;
+        .write_to_file(join(outdir, "bindings.rs"))?;
 
     Ok(())
 }
@@ -180,7 +180,7 @@ fn make_library(outdir: &str, cef_dir: &str) -> Result<()> {
         .static_crt(true)
         .target(&env::var("TARGET")?)
         .warnings(false)
-        .out_dir(&outdir)
+        .out_dir(outdir)
         .flag(if cfg!(target_os = "windows") {
             "/std:c++20"
         } else {
@@ -243,7 +243,7 @@ fn main() -> Result<()> {
         download_cef(&outdir)?;
     }
 
-    if !fs::exists(&join(cef_dir, "./libcef_dll_wrapper")).unwrap_or(false) {
+    if !fs::exists(join(cef_dir, "./libcef_dll_wrapper")).unwrap_or(false) {
         make_cef(cef_dir)?;
     }
 

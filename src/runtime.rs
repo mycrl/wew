@@ -389,7 +389,7 @@ impl<R, W> Drop for IRuntime<R, W> {
     fn drop(&mut self) {
         // If using multi-threaded message loop, quit the message loop.
         if self.attr.multi_threaded_message_loop {
-            MainThreadMessageLoop::default().quit();
+            MainThreadMessageLoop.quit();
         }
 
         unsafe {
@@ -423,15 +423,14 @@ impl<R, W> Runtime<R, W> {
             return Err(Error::NonUIThread);
         }
 
-        let custom_scheme = if let Some(attr) = attr.custom_scheme.as_ref() {
-            Some(sys::CustomSchemeAttributes {
+        let custom_scheme = attr
+            .custom_scheme
+            .as_ref()
+            .map(|attr| sys::CustomSchemeAttributes {
                 name: attr.name.as_raw(),
                 domain: attr.domain.as_raw(),
                 factory: attr.handler.as_raw_handler().as_ptr(),
-            })
-        } else {
-            None
-        };
+            });
 
         let options = sys::RuntimeSettings {
             cache_path: attr.cache_path.as_raw(),
@@ -464,7 +463,7 @@ impl<R, W> Runtime<R, W> {
             custom_scheme: custom_scheme
                 .as_ref()
                 .map(|it| it as *const _)
-                .unwrap_or_else(|| null()),
+                .unwrap_or_else(null),
         };
 
         let initialized: Arc<AtomicBool> = Default::default();
@@ -510,12 +509,12 @@ impl<R, W> Runtime<R, W> {
         RUNTIME_RUNNING.store(true, Ordering::Relaxed);
 
         Ok(Self(Arc::new(IRuntime {
-            _r: PhantomData::default(),
-            _w: PhantomData::default(),
-            handler: ThreadSafePointer::new(handler),
-            raw: Mutex::new(raw),
-            initialized,
             attr,
+            initialized,
+            raw: Mutex::new(raw),
+            handler: ThreadSafePointer::new(handler),
+            _r: PhantomData,
+            _w: PhantomData,
         })))
     }
 }
