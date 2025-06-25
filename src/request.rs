@@ -9,7 +9,7 @@ use std::{
 
 use url::Url;
 
-use crate::{ThreadSafePointer, sys};
+use crate::{sys, utils::ThreadSafePointer};
 
 struct LocalDiskRequestHandler {
     file: Option<File>,

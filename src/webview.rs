@@ -39,7 +39,7 @@ use std::{
 use parking_lot::Mutex;
 
 use crate::{
-    CStringExt, Error, ThreadSafePointer, WindowlessRenderWebView,
+    Error, WindowlessRenderWebView,
     events::{
         IMEAction, KeyboardEvent, KeyboardEventType, KeyboardModifiers, MouseButton, MouseEvent,
         Rect,
@@ -47,6 +47,7 @@ use crate::{
     request::CustomRequestHandlerFactory,
     runtime::Runtime,
     sys,
+    utils::{CStringExt, ThreadSafePointer},
 };
 
 /// Represents the state of a web page
@@ -147,20 +148,32 @@ pub struct WebViewAttributes {
     pub height: u32,
     /// window device scale factor.
     pub device_scale_factor: f32,
-    /// page defalt fixed font size.
+    /// page defalt font size.
     pub default_font_size: u32,
     /// page defalt fixed font size.
     pub default_fixed_font_size: u32,
-    /// Controls whether JavaScript can be executed.
-    pub javascript_enable: bool,
-    /// Controls whether JavaScript can access the clipboard.
-    pub javascript_access_clipboard: bool,
-    /// Controls whether local storage can be used.
-    pub local_storage: bool,
+    /// The minimum font size.
+    pub minimum_font_size: u32,
+    /// The minimum logical font size.
+    pub minimum_logical_font_size: u32,
     /// Controls whether WebGL is enabled.
     pub webgl: bool,
     /// Controls whether databases are enabled.
     pub databases: bool,
+    /// Controls whether JavaScript can be executed.
+    pub javascript: bool,
+    /// Controls whether JavaScript can access the clipboard.
+    pub javascript_access_clipboard: bool,
+    /// Controls whether JavaScript can be used to close windows that were not
+    /// opened via JavaScript.
+    pub javascript_close_windows: bool,
+    /// Controls whether DOM pasting is supported in the editor via
+    /// execCommand("paste").
+    pub javascript_dom_paste: bool,
+    /// Controls whether local storage can be used.
+    pub local_storage: bool,
+    /// END values that map to WebPreferences settings.
+    pub background_color: u32,
 }
 
 unsafe impl Send for WebViewAttributes {}
@@ -176,12 +189,17 @@ impl Default for WebViewAttributes {
             windowless_frame_rate: 30,
             default_font_size: 12,
             default_fixed_font_size: 12,
-            javascript_enable: true,
+            javascript: true,
             local_storage: true,
             javascript_access_clipboard: false,
             request_handler_factory: None,
             webgl: false,
             databases: false,
+            javascript_close_windows: false,
+            javascript_dom_paste: false,
+            background_color: 0xFFFFFFFF,
+            minimum_font_size: 12,
+            minimum_logical_font_size: 12,
         }
     }
 }
@@ -269,20 +287,19 @@ impl WebViewAttributesBuilder {
         self
     }
 
-    /// Set whether JavaScript is enabled
+    /// Set the minimum font size
     ///
-    /// This function is used to set whether JavaScript is enabled.
-    pub fn with_javascript_enable(mut self, value: bool) -> Self {
-        self.0.javascript_enable = value;
+    /// This function is used to set the minimum font size.
+    pub fn with_minimum_font_size(mut self, value: u32) -> Self {
+        self.0.minimum_font_size = value;
         self
     }
 
-    /// Set whether JavaScript can access the clipboard
+    /// Set the minimum logical font size
     ///
-    /// This function is used to set whether JavaScript can access the
-    /// clipboard.
-    pub fn with_javascript_access_clipboard(mut self, value: bool) -> Self {
-        self.0.javascript_access_clipboard = value;
+    /// This function is used to set the minimum logical font size.
+    pub fn with_minimum_logical_font_size(mut self, value: u32) -> Self {
+        self.0.minimum_logical_font_size = value;
         self
     }
 
@@ -307,6 +324,51 @@ impl WebViewAttributesBuilder {
     /// This function is used to set whether databases are enabled.
     pub fn with_databases(mut self, value: bool) -> Self {
         self.0.databases = value;
+        self
+    }
+
+    /// Set whether JavaScript is enabled
+    ///
+    /// This function is used to set whether JavaScript is enabled.
+    pub fn with_javascript(mut self, value: bool) -> Self {
+        self.0.javascript = value;
+        self
+    }
+
+    /// Set whether JavaScript can access the clipboard
+    ///
+    /// This function is used to set whether JavaScript can access the
+    /// clipboard.
+    pub fn with_javascript_access_clipboard(mut self, value: bool) -> Self {
+        self.0.javascript_access_clipboard = value;
+        self
+    }
+
+    /// Set whether JavaScript can be used to close windows that were not opened
+    /// via JavaScript.
+    ///
+    /// This function is used to set whether JavaScript can be used to close
+    /// windows that were not opened via JavaScript.
+    pub fn with_javascript_close_windows(mut self, value: bool) -> Self {
+        self.0.javascript_close_windows = value;
+        self
+    }
+
+    /// Set whether DOM pasting is supported in the editor via
+    /// execCommand("paste").
+    ///
+    /// This function is used to set whether DOM pasting is supported in the
+    /// editor via execCommand("paste").
+    pub fn with_javascript_dom_paste(mut self, value: bool) -> Self {
+        self.0.javascript_dom_paste = value;
+        self
+    }
+
+    /// Set the background color
+    ///
+    /// This function is used to set the background color.
+    pub fn with_background_color(mut self, value: u32) -> Self {
+        self.0.background_color = value;
         self
     }
 
@@ -345,13 +407,18 @@ impl<R, W> WebView<R, W> {
             height: attr.height,
             webgl: attr.webgl,
             databases: attr.databases,
+            local_storage: attr.local_storage,
+            background_color: attr.background_color,
+            javascript: attr.javascript,
+            javascript_access_clipboard: attr.javascript_access_clipboard,
+            javascript_close_windows: attr.javascript_close_windows,
+            javascript_dom_paste: attr.javascript_dom_paste,
+            minimum_font_size: attr.minimum_font_size as _,
+            minimum_logical_font_size: attr.minimum_logical_font_size as _,
             device_scale_factor: attr.device_scale_factor,
             windowless_frame_rate: attr.windowless_frame_rate,
             default_fixed_font_size: attr.default_fixed_font_size as _,
             default_font_size: attr.default_font_size as _,
-            javascript: attr.javascript_enable,
-            javascript_access_clipboard: attr.javascript_access_clipboard,
-            local_storage: attr.local_storage,
             window_handle: if let Some(it) = &attr.window_handle {
                 it.as_ptr()
             } else {

@@ -66,12 +66,59 @@ typedef struct
     const RequestHandlerFactory *factory;
 } CustomSchemeAttributes;
 
+typedef enum
+{
+    ///
+    /// Default logging (currently INFO logging).
+    ///
+    WEBVIEW_LOG_DEFAULT,
+
+    ///
+    /// Verbose logging.
+    ///
+    WEBVIEW_LOG_VERBOSE,
+
+    ///
+    /// DEBUG logging.
+    ///
+    WEBVIEW_LOG_DEBUG = WEBVIEW_LOG_VERBOSE,
+
+    ///
+    /// INFO logging.
+    ///
+    WEBVIEW_LOG_INFO,
+
+    ///
+    /// WARNING logging.
+    ///
+    WEBVIEW_LOG_WARNING,
+
+    ///
+    /// ERROR logging.
+    ///
+    WEBVIEW_LOG_ERROR,
+
+    ///
+    /// FATAL logging.
+    ///
+    WEBVIEW_LOG_FATAL,
+
+    ///
+    /// Disable logging to file for all messages, and to stderr for messages with
+    /// severity less than FATAL.
+    ///
+    WEBVIEW_LOG_DISABLE = 99
+} LogLevel;
+
 typedef struct
 {
     const CustomSchemeAttributes *custom_scheme;
 
     /// The directory where data for the global browser cache will be stored on disk.
-    const char *cache_dir_path;
+    const char *cache_path;
+
+    /// The root directory for installation-specific data and the parent directory for profile-specific data.
+    const char *root_cache_path;
 
     /// The path to a separate executable that will be launched for sub-processes.
     const char *browser_subprocess_path;
@@ -99,6 +146,44 @@ typedef struct
 
     /// Set to true (1) to have the browser process message loop run in a separate thread.
     bool multi_threaded_message_loop;
+
+    /// Set to true (1) to disable the use of standard CEF and Chromium command-line parameters to configure the browser
+    /// process.
+    bool command_line_args_disabled;
+
+    /// To persist session cookies (cookies without an expiry date or validity interval) by default when using the
+    /// global cookie manager set this value to true (1).
+    bool persist_session_cookies;
+
+    /// Value that will be returned as the User-Agent HTTP header.
+    const char *user_agent;
+
+    /// Value that will be inserted as the product portion of the default User-Agent string.
+    const char *user_agent_product;
+
+    /// The locale string that will be passed to WebKit.
+    const char *locale;
+
+    /// The directory and file name to use for the debug log.
+    const char *log_file;
+
+    /// The log severity.
+    LogLevel log_severity;
+
+    /// Custom flags that will be used when initializing the V8 JavaScript engine.
+    const char *javascript_flags;
+
+    /// The fully qualified path for the resources directory.
+    const char *resources_dir_path;
+
+    /// The fully qualified path for the locales directory.
+    const char *locales_dir_path;
+
+    /// Background color used for the browser before a document is loaded and when no document color is specified.
+    uint32_t background_color;
+
+    /// Specify whether signal handlers must be disabled on POSIX systems.
+    bool disable_signal_handlers;
 } RuntimeSettings;
 
 typedef struct
@@ -119,11 +204,17 @@ typedef struct
     /// window device scale factor.
     float device_scale_factor;
 
+    /// webview defalt font size.
+    int default_font_size;
+
     /// webview defalt fixed font size.
     int default_fixed_font_size;
 
-    /// webview defalt font size.
-    int default_font_size;
+    /// The minimum font size.
+    int minimum_font_size;
+
+    /// The minimum logical font size.
+    int minimum_logical_font_size;
 
     /// Controls whether WebGL is enabled.
     bool webgl;
@@ -134,11 +225,20 @@ typedef struct
     /// Controls whether JavaScript can be executed.
     bool javascript;
 
+    /// Controls whether JavaScript can be used to close windows that were not opened via JavaScript.
+    bool javascript_close_windows;
+
     /// Controls whether JavaScript can access the clipboard.
     bool javascript_access_clipboard;
 
+    /// Controls whether DOM pasting is supported in the editor via execCommand("paste").
+    bool javascript_dom_paste;
+
     /// Controls whether local storage can be used.
     bool local_storage;
+
+    /// END values that map to WebPreferences settings.
+    uint32_t background_color;
 
     /// The maximum rate in frames per second (fps) that CefRenderHandler::OnPaint will be called for a
     /// windowless browser.

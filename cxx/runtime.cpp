@@ -90,15 +90,19 @@ CefRefPtr<IWebView> IRuntime::CreateWebView(std::string url, const WebViewSettin
     CefBrowserSettings broswer_settings;
 
     // clang-format off
-    broswer_settings.background_color = 0xFF;
     broswer_settings.default_font_size = settings->default_font_size;
-    broswer_settings.windowless_frame_rate = settings->windowless_frame_rate;
     broswer_settings.default_fixed_font_size = settings->default_fixed_font_size;
+    broswer_settings.minimum_font_size = settings->minimum_font_size;
+    broswer_settings.minimum_logical_font_size = settings->minimum_logical_font_size;
     broswer_settings.webgl = settings->webgl ? STATE_ENABLED : STATE_DISABLED;
     broswer_settings.databases = settings->databases ? STATE_ENABLED : STATE_DISABLED;
     broswer_settings.local_storage = settings->local_storage ? STATE_ENABLED : STATE_DISABLED;
     broswer_settings.javascript = settings->javascript ? STATE_ENABLED : STATE_DISABLED;
     broswer_settings.javascript_access_clipboard = settings->javascript_access_clipboard ? STATE_ENABLED : STATE_DISABLED;
+    broswer_settings.javascript_dom_paste = settings->javascript_dom_paste ? STATE_ENABLED : STATE_DISABLED;
+    broswer_settings.javascript_close_windows = settings->javascript_close_windows ? STATE_ENABLED : STATE_DISABLED;
+    broswer_settings.background_color = settings->background_color;
+    broswer_settings.windowless_frame_rate = settings->windowless_frame_rate;
     // clang-format on
 
     CefWindowInfo window_info;
@@ -162,19 +166,25 @@ void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler)
 
     CefSettings cef_settings;
 
-    CefString(&cef_settings.locale).FromString("en-US");
-
+    cef_log_severity_t a;
     cef_settings.no_sandbox = true;
-    cef_settings.command_line_args_disabled = true;
+    cef_settings.background_color = settings->background_color;
+    cef_settings.external_message_pump = settings->external_message_pump;
+    cef_settings.persist_session_cookies = settings->persist_session_cookies;
+    cef_settings.disable_signal_handlers = settings->disable_signal_handlers;
+    cef_settings.command_line_args_disabled = settings->command_line_args_disabled;
     cef_settings.windowless_rendering_enabled = settings->windowless_rendering_enabled;
     cef_settings.multi_threaded_message_loop = settings->multi_threaded_message_loop;
-    cef_settings.external_message_pump = settings->external_message_pump;
-    cef_settings.background_color = 0xFF;
+    cef_settings.log_severity = static_cast<cef_log_severity_t>(static_cast<int>(settings->log_severity));
 
-    if (settings->cache_dir_path != nullptr)
+    if (settings->cache_path != nullptr)
     {
-        CefString(&cef_settings.cache_path).FromString(settings->cache_dir_path);
-        CefString(&cef_settings.root_cache_path).FromString(settings->cache_dir_path);
+        CefString(&cef_settings.cache_path).FromString(settings->cache_path);
+    }
+
+    if (settings->root_cache_path != nullptr)
+    {
+        CefString(&cef_settings.root_cache_path).FromString(settings->root_cache_path);
     }
 
     if (settings->browser_subprocess_path != nullptr)
@@ -182,7 +192,6 @@ void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler)
         CefString(&cef_settings.browser_subprocess_path).FromString(settings->browser_subprocess_path);
     }
 
-#ifdef MACOS
     if (settings->framework_dir_path != nullptr)
     {
         CefString(&cef_settings.framework_dir_path).FromString(settings->framework_dir_path);
@@ -192,7 +201,45 @@ void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler)
     {
         CefString(&cef_settings.main_bundle_path).FromString(settings->main_bundle_path);
     }
-#endif
+
+    if (settings->javascript_flags != nullptr)
+    {
+        CefString(&cef_settings.javascript_flags).FromString(settings->javascript_flags);
+    }
+
+    if (settings->resources_dir_path != nullptr)
+    {
+        CefString(&cef_settings.resources_dir_path).FromString(settings->resources_dir_path);
+    }
+
+    if (settings->locales_dir_path != nullptr)
+    {
+        CefString(&cef_settings.locales_dir_path).FromString(settings->locales_dir_path);
+    }
+
+    if (settings->user_agent != nullptr)
+    {
+        CefString(&cef_settings.user_agent).FromString(settings->user_agent);
+    }
+    else
+    {
+        CefString(&cef_settings.locale).FromString("en-US");
+    }
+
+    if (settings->user_agent_product != nullptr)
+    {
+        CefString(&cef_settings.user_agent_product).FromString(settings->user_agent_product);
+    }
+
+    if (settings->locale != nullptr)
+    {
+        CefString(&cef_settings.locale).FromString(settings->locale);
+    }
+
+    if (settings->log_file != nullptr)
+    {
+        CefString(&cef_settings.log_file).FromString(settings->log_file);
+    }
 
     return new Runtime{new IRuntime(settings, cef_settings, handler)};
 }

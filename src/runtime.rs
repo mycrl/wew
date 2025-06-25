@@ -10,13 +10,15 @@ use std::{
     thread,
 };
 
+use log::LevelFilter;
 use parking_lot::Mutex;
 
 use crate::{
-    Args, CStringExt, Error, MainThreadMessageLoop, MessagePumpLoop, MultiThreadMessageLoop,
-    NativeWindowWebView, ThreadSafePointer, WindowlessRenderWebView,
+    Error, MainThreadMessageLoop, MessagePumpLoop, MultiThreadMessageLoop, NativeWindowWebView,
+    WindowlessRenderWebView,
     request::CustomSchemeAttributes,
     sys,
+    utils::{Args, CStringExt, ThreadSafePointer, is_main_thread},
     webview::{
         MixWebviewHnadler, WebView, WebViewAttributes, WebViewHandler,
         WindowlessRenderWebViewHandler,
@@ -42,7 +44,11 @@ pub struct RuntimeAttributes<R, W> {
 
     /// The directory where data for the global browser cache will be stored on
     /// disk
-    cache_dir_path: Option<CString>,
+    cache_path: Option<CString>,
+
+    /// The root directory for installation-specific data and the parent
+    /// directory for profile-specific data.
+    root_cache_path: Option<CString>,
 
     /// The path to a separate executable that will be launched for
     /// sub-processes
@@ -75,6 +81,42 @@ pub struct RuntimeAttributes<R, W> {
 
     /// Whether to use multi-threaded message loop
     multi_threaded_message_loop: bool,
+
+    /// Whether to disable command line arguments
+    command_line_args_disabled: bool,
+
+    /// Whether to persist session cookies
+    persist_session_cookies: bool,
+
+    /// The user agent
+    user_agent: Option<CString>,
+
+    /// The user agent product
+    user_agent_product: Option<CString>,
+
+    /// The locale
+    locale: Option<CString>,
+
+    /// The log file
+    log_file: Option<CString>,
+
+    /// The log severity
+    log_severity: Option<LevelFilter>,
+
+    /// The javascript flags
+    javascript_flags: Option<CString>,
+
+    /// The resources directory path
+    resources_dir_path: Option<CString>,
+
+    /// The locales directory path
+    locales_dir_path: Option<CString>,
+
+    /// The background color
+    background_color: u32,
+
+    /// Whether to disable signal handlers
+    disable_signal_handlers: bool,
 }
 
 impl<W> RuntimeAttributes<MainThreadMessageLoop, W> {
@@ -122,8 +164,15 @@ impl<R, W> RuntimeAttributesBuilder<R, W> {
 
     /// Set the directory where data for the global browser cache will be stored
     /// on disk
-    pub fn with_cache_dir_path(mut self, value: &str) -> Self {
-        self.0.cache_dir_path = Some(CString::new(value).unwrap());
+    pub fn with_cache_path(mut self, value: &str) -> Self {
+        self.0.cache_path = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the root directory for installation-specific data and the parent
+    /// directory for profile-specific data.
+    pub fn with_root_cache_path(mut self, value: &str) -> Self {
+        self.0.root_cache_path = Some(CString::new(value).unwrap());
         self
     }
 
@@ -156,6 +205,79 @@ impl<R, W> RuntimeAttributesBuilder<R, W> {
     /// "main-bundle-path" command-line switch.
     pub fn with_main_bundle_path(mut self, value: &str) -> Self {
         self.0.main_bundle_path = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the user agent
+    pub fn with_user_agent(mut self, value: &str) -> Self {
+        self.0.user_agent = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the user agent product
+    pub fn with_user_agent_product(mut self, value: &str) -> Self {
+        self.0.user_agent_product = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the locale
+    pub fn with_locale(mut self, value: &str) -> Self {
+        self.0.locale = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the log file
+    pub fn with_log_file(mut self, value: &str) -> Self {
+        self.0.log_file = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the log severity
+    pub fn with_log_severity(mut self, value: LevelFilter) -> Self {
+        self.0.log_severity = Some(value);
+
+        self
+    }
+
+    /// Set the javascript flags
+    pub fn with_javascript_flags(mut self, value: &str) -> Self {
+        self.0.javascript_flags = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the resources directory path
+    pub fn with_resources_dir_path(mut self, value: &str) -> Self {
+        self.0.resources_dir_path = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the locales directory path
+    pub fn with_locales_dir_path(mut self, value: &str) -> Self {
+        self.0.locales_dir_path = Some(CString::new(value).unwrap());
+        self
+    }
+
+    /// Set the background color
+    pub fn with_background_color(mut self, value: u32) -> Self {
+        self.0.background_color = value;
+        self
+    }
+
+    /// Set whether to disable signal handlers
+    pub fn with_disable_signal_handlers(mut self, value: bool) -> Self {
+        self.0.disable_signal_handlers = value;
+        self
+    }
+
+    /// Set whether to disable command line arguments
+    pub fn with_command_line_args_disabled(mut self, value: bool) -> Self {
+        self.0.command_line_args_disabled = value;
+        self
+    }
+
+    /// Set whether to persist session cookies
+    pub fn with_persist_session_cookies(mut self, value: bool) -> Self {
+        self.0.persist_session_cookies = value;
         self
     }
 }
@@ -297,6 +419,10 @@ impl<R, W> Runtime<R, W> {
             return Err(Error::RuntimeAlreadyExists);
         }
 
+        if !is_main_thread() {
+            return Err(Error::NonUIThread);
+        }
+
         let custom_scheme = if let Some(attr) = attr.custom_scheme.as_ref() {
             Some(sys::CustomSchemeAttributes {
                 name: attr.name.as_raw(),
@@ -308,13 +434,33 @@ impl<R, W> Runtime<R, W> {
         };
 
         let options = sys::RuntimeSettings {
-            cache_dir_path: attr.cache_dir_path.as_raw(),
+            cache_path: attr.cache_path.as_raw(),
+            root_cache_path: attr.root_cache_path.as_raw(),
+            background_color: attr.background_color,
+            command_line_args_disabled: attr.command_line_args_disabled,
+            disable_signal_handlers: attr.disable_signal_handlers,
+            javascript_flags: attr.javascript_flags.as_raw(),
+            persist_session_cookies: attr.persist_session_cookies,
+            user_agent: attr.user_agent.as_raw(),
+            user_agent_product: attr.user_agent_product.as_raw(),
+            locale: attr.locale.as_raw(),
+            log_file: attr.log_file.as_raw(),
+            resources_dir_path: attr.resources_dir_path.as_raw(),
+            locales_dir_path: attr.locales_dir_path.as_raw(),
             browser_subprocess_path: attr.browser_subprocess_path.as_raw(),
             windowless_rendering_enabled: attr.windowless_rendering_enabled,
             main_bundle_path: attr.main_bundle_path.as_raw(),
             framework_dir_path: attr.framework_dir_path.as_raw(),
             external_message_pump: attr.external_message_pump,
             multi_threaded_message_loop: attr.multi_threaded_message_loop,
+            log_severity: match attr.log_severity.unwrap_or(LevelFilter::Off) {
+                LevelFilter::Off => sys::LogLevel::WEBVIEW_LOG_DISABLE,
+                LevelFilter::Info => sys::LogLevel::WEBVIEW_LOG_INFO,
+                LevelFilter::Error => sys::LogLevel::WEBVIEW_LOG_ERROR,
+                LevelFilter::Warn => sys::LogLevel::WEBVIEW_LOG_WARNING,
+                LevelFilter::Debug => sys::LogLevel::WEBVIEW_LOG_DEBUG,
+                LevelFilter::Trace => sys::LogLevel::WEBVIEW_LOG_VERBOSE,
+            },
             custom_scheme: custom_scheme
                 .as_ref()
                 .map(|it| it as *const _)

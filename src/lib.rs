@@ -1,3 +1,5 @@
+mod utils;
+
 /// Used to handle window events.
 pub mod events;
 
@@ -10,16 +12,12 @@ pub mod runtime;
 /// `WebView` module and related types.
 pub mod webview;
 
-use std::{
-    env::args,
-    ffi::{CString, c_char},
-    ptr::{NonNull, null},
-};
-
 use self::runtime::{RUNTIME_RUNNING, RuntimeAttributesBuilder};
 
 #[cfg(feature = "winit")]
 pub use winit;
+
+pub use log;
 
 #[allow(
     dead_code,
@@ -32,76 +30,10 @@ mod sys {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
-/// A pointer type that is assumed to be thread-safe.
-///
-/// The creator of this type must ensure that the pointer implementation is
-/// thread-safe.
-struct ThreadSafePointer<T>(NonNull<T>);
-
-unsafe impl<T> Send for ThreadSafePointer<T> {}
-unsafe impl<T> Sync for ThreadSafePointer<T> {}
-
-impl<T> ThreadSafePointer<T> {
-    fn new(ptr: *mut T) -> Self {
-        Self(NonNull::new(ptr).unwrap())
-    }
-
-    fn as_ptr(&self) -> *mut T {
-        self.0.as_ptr()
-    }
-}
-
-trait CStringExt {
-    fn as_raw(&self) -> *const c_char;
-}
-
-impl CStringExt for Option<CString> {
-    fn as_raw(&self) -> *const c_char {
-        self.as_ref()
-            .map(|it| it.as_c_str().as_ptr() as _)
-            .unwrap_or_else(|| null())
-    }
-}
-
-impl CStringExt for CString {
-    fn as_raw(&self) -> *const c_char {
-        self.as_c_str().as_ptr()
-    }
-}
-
-struct Args {
-    #[allow(unused)]
-    inner: Vec<CString>,
-    raw: Vec<*const c_char>,
-}
-
-unsafe impl Send for Args {}
-unsafe impl Sync for Args {}
-
-impl Default for Args {
-    fn default() -> Self {
-        let inner = args()
-            .map(|it| CString::new(it).unwrap())
-            .collect::<Vec<_>>();
-
-        let raw = inner.iter().map(|it| it.as_raw()).collect::<Vec<_>>();
-
-        Self { inner, raw }
-    }
-}
-
-impl Args {
-    fn size(&self) -> usize {
-        self.raw.len()
-    }
-
-    fn as_ptr(&self) -> *const *const c_char {
-        self.raw.as_ptr() as _
-    }
-}
-
 #[derive(Debug)]
 pub enum Error {
+    /// The current thread is not the main thread.
+    NonUIThread,
     FailedToCreateRuntime,
     /// Only one runtime can be created in a process. Repeated creation will
     /// trigger this error.
@@ -243,7 +175,11 @@ pub fn execute_subprocess() -> bool {
         }
     }
 
-    let args = Args::default();
+    if !utils::is_main_thread() {
+        return false;
+    }
+
+    let args = utils::Args::default();
     (unsafe { sys::execute_subprocess(args.size() as _, args.as_ptr() as _) }) == 0
 }
 
@@ -257,5 +193,5 @@ pub fn is_subprocess() -> bool {
     // This check is not very strict, but processes with a "type" parameter can
     // generally be considered subprocesses, unless the main process also uses
     // this parameter.
-    args().find(|it| it.contains("--type")).is_some()
+    std::env::args().find(|it| it.contains("--type")).is_some()
 }
