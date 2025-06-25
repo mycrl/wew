@@ -1,6 +1,6 @@
 [package]
 name = "wew"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 edition = "2024"
 authors = ["mycrl <lepidodendraceae@gmail.com>"]
 description = "Cross-platform WebView rendering library for rust."
