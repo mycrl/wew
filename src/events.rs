@@ -137,7 +137,7 @@ impl EventAdapter {
     /// This method directly calls the operating system API to get the current
     /// system capslock state.
     pub fn get_capslock_state() -> bool {
-        #[allow(unused_mut)]
+        #[allow(unused)]
         let mut state = false;
 
         #[cfg(target_os = "windows")]
@@ -208,6 +208,25 @@ impl EventAdapter {
                 }
                 Ime::Enabled => {
                     self.ime = true;
+
+                    {
+                        let mut event = KeyboardEvent {
+                            ty: KeyboardEventType::KeyDown,
+                            modifiers: KeyboardModifiers::None,
+                            windows_key_code: 8,
+                            native_key_code: 14,
+                            is_system_key: 0,
+                            character: 8,
+                            unmodified_character: 8,
+                            focus_on_editable_field: false,
+                        };
+
+                        webview.keyboard(&event);
+
+                        event.ty = KeyboardEventType::KeyUp;
+
+                        webview.keyboard(&event);
+                    }
                 }
                 Ime::Disabled => {
                     self.ime = false;
@@ -316,6 +335,7 @@ impl EventAdapter {
                                 event.native_key_code >= 0x10 && event.native_key_code <= 0x37;
 
                             if !self.modifiers.contains(KeyboardModifiers::CapsLock)
+                                && !self.modifiers.contains(KeyboardModifiers::Shift)
                                 && is_ascii
                                 && event.native_key_code != Self::SCANCODE_ENTER
                             {
