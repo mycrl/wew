@@ -1,6 +1,6 @@
 [package]
 name = "wew"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.3"
 edition = "2024"
 authors = ["mycrl <lepidodendraceae@gmail.com>"]
 description = "Cross-platform WebView rendering library for rust."
@@ -49,3 +49,6 @@ winit = ["dep:winit"]
 
 [workspace]
 members = ["examples/*"]
+
+[package.metadata.docs.rs]
+all-features = true

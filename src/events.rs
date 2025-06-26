@@ -128,25 +128,6 @@ pub struct KeyboardEvent {
 #[derive(Default)]
 pub struct EventAdapter {
     modifiers: KeyboardModifiers,
-    ime: bool,
-}
-
-impl EventAdapter {
-    /// Get the state of the capslock key
-    ///
-    /// This method directly calls the operating system API to get the current
-    /// system capslock state.
-    pub fn get_capslock_state() -> bool {
-        #[allow(unused)]
-        let mut state = false;
-
-        #[cfg(target_os = "windows")]
-        {
-            state = (unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 0x0001) != 0;
-        }
-
-        state
-    }
 }
 
 #[cfg(feature = "winit")]
@@ -156,6 +137,15 @@ impl EventAdapter {
     const SCANCODE_LCTRL: u32 = 29;
     const SCANCODE_ENTER: u32 = 28;
     const SCANCODE_SPACE: u32 = 57;
+
+    /// Get the state of the capslock key
+    ///
+    /// This method directly calls the operating system API to get the current
+    /// system capslock state.
+    #[cfg(target_os = "windows")]
+    fn get_capslock_state() -> bool {
+        return (unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 0x0001) != 0;
+    }
 
     /// Handling window events for `winit`
     ///
@@ -193,51 +183,38 @@ impl EventAdapter {
         match event {
             WindowEvent::Ime(ime) => match ime {
                 Ime::Commit(composition) => {
-                    if self.ime {
-                        webview.ime(&IMEAction::Composition(composition));
-                    }
+                    webview.ime(&IMEAction::Composition(composition));
                 }
                 Ime::Preedit(preedit, Some((cursor_pos, selection_start))) => {
-                    if self.ime {
-                        webview.ime(&IMEAction::Pre(
-                            preedit,
-                            *cursor_pos as i32,
-                            *selection_start as i32,
-                        ));
-                    }
+                    webview.ime(&IMEAction::Pre(
+                        preedit,
+                        *cursor_pos as i32,
+                        *selection_start as i32,
+                    ));
                 }
+                // Because key events are triggered before IME events, an extra character is output.
+                // If IME events are enabled, the previously entered character should be deleted.
                 Ime::Enabled => {
-                    self.ime = true;
+                    let mut event = KeyboardEvent {
+                        ty: KeyboardEventType::KeyDown,
+                        modifiers: KeyboardModifiers::None,
+                        windows_key_code: 8,
+                        native_key_code: 14,
+                        is_system_key: 0,
+                        character: 8,
+                        unmodified_character: 8,
+                        focus_on_editable_field: false,
+                    };
 
-                    {
-                        let mut event = KeyboardEvent {
-                            ty: KeyboardEventType::KeyDown,
-                            modifiers: KeyboardModifiers::None,
-                            windows_key_code: 8,
-                            native_key_code: 14,
-                            is_system_key: 0,
-                            character: 8,
-                            unmodified_character: 8,
-                            focus_on_editable_field: false,
-                        };
+                    webview.keyboard(&event);
 
-                        webview.keyboard(&event);
+                    event.ty = KeyboardEventType::KeyUp;
 
-                        event.ty = KeyboardEventType::KeyUp;
-
-                        webview.keyboard(&event);
-                    }
-                }
-                Ime::Disabled => {
-                    self.ime = false;
+                    webview.keyboard(&event);
                 }
                 _ => (),
             },
             WindowEvent::ModifiersChanged(modifiers) => {
-                if self.ime {
-                    return;
-                }
-
                 self.modifiers = KeyboardModifiers::None;
 
                 let state = modifiers.state();
@@ -259,6 +236,7 @@ impl EventAdapter {
                     }
                 }
 
+                #[cfg(target_os = "windows")]
                 if Self::get_capslock_state() {
                     self.modifiers |= KeyboardModifiers::CapsLock;
                 }
@@ -270,10 +248,6 @@ impl EventAdapter {
                             self.modifiers |= KeyboardModifiers::CapsLock;
                         }
                     }
-                }
-
-                if self.ime {
-                    return;
                 }
 
                 let mut event = KeyboardEvent::default();
@@ -394,6 +368,7 @@ impl EventAdapter {
 
                 // Since events cannot be captured when not in focus, the case
                 // state must be reacquired when refocusing.
+                #[cfg(target_os = "windows")]
                 if *state && Self::get_capslock_state() {
                     self.modifiers |= KeyboardModifiers::CapsLock;
                 }
