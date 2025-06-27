@@ -596,8 +596,6 @@ impl WebView<WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn keyboard(&self, event: &KeyboardEvent) {
-        println!("=============== {:?}", event);
-
         let mut modifiers = sys::EventFlags::WEBVIEW_EVENTFLAG_NONE as u32;
         for it in KeyboardModifiers::all() {
             if event.modifiers.contains(it) {
