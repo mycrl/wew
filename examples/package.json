@@ -6,8 +6,8 @@
     "main": "build.js",
     "private": true,
     "scripts": {
-        "windowless_rendering": "node ./build.js -- --project windowless-rendering",
-        "main_thread": "node ./build.js -- --project main-thread"
+        "windowless-rendering": "node ./build.js -- --project windowless-rendering",
+        "main-thread": "node ./build.js -- --project main-thread"
     },
     "repository": {
         "type": "git",
