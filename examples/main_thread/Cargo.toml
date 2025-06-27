@@ -1,0 +1,15 @@
+[package]
+name = "main_thread"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "main-thread"
+path = "./src/main.rs"
+
+[[bin]]
+name = "main-thread-helper"
+path = "./src/helper.rs"
+
+[dependencies]
+wew = { path = "../../", features = ["winit"] }

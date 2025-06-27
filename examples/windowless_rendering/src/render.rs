@@ -2,6 +2,7 @@ use std::{borrow::Cow, sync::Arc};
 
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
+use wew::Rect;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     wgt::SurfaceConfiguration,
@@ -268,11 +269,11 @@ impl Render {
         })
     }
 
-    pub fn render(&mut self, buffer: &[u8], width: u32, height: u32) {
-        if width != self.texture.width() || height != self.texture.height() {
+    pub fn render(&mut self, buffer: &[u8], rect: &Rect) {
+        if rect.width != self.texture.width() || rect.height != self.texture.height() {
             self.surface.configure(&self.device, {
-                self.surface_config.width = width;
-                self.surface_config.height = height;
+                self.surface_config.width = rect.width;
+                self.surface_config.height = rect.height;
 
                 &self.surface_config
             });
@@ -287,8 +288,8 @@ impl Render {
                 view_formats: &[],
                 size: Extent3d {
                     depth_or_array_layers: 1,
-                    width,
-                    height,
+                    width: rect.width,
+                    height: rect.height,
                 },
             });
 
@@ -320,15 +321,23 @@ impl Render {
                 aspect: TextureAspect::All,
                 texture: &self.texture,
                 mip_level: 0,
-                origin: Origin3d::ZERO,
+                origin: Origin3d {
+                    x: rect.x,
+                    y: rect.y,
+                    z: 0,
+                },
             },
             buffer,
             TexelCopyBufferLayout {
-                bytes_per_row: Some(self.texture.width() * 4),
-                rows_per_image: Some(self.texture.height()),
+                bytes_per_row: Some(rect.width * 4),
+                rows_per_image: Some(rect.height),
                 offset: 0,
             },
-            self.texture.size(),
+            Extent3d {
+                width: rect.width,
+                height: rect.height,
+                depth_or_array_layers: 1,
+            },
         );
 
         if let Ok(output) = self.surface.get_current_texture() {

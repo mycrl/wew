@@ -32,22 +32,23 @@
 
 use std::{
     ffi::{CStr, CString, c_char, c_int, c_void},
+    marker::PhantomData,
     ops::Deref,
     ptr::null,
+    sync::Arc,
 };
 
 use parking_lot::Mutex;
 
 use crate::{
-    Error, WindowlessRenderWebView,
+    Error, Rect, WindowlessRenderWebView,
     events::{
         IMEAction, KeyboardEvent, KeyboardEventType, KeyboardModifiers, MouseButton, MouseEvent,
-        Rect,
     },
-    request::CustomRequestHandlerFactory,
-    runtime::Runtime,
+    request::{CustomRequestHandlerFactory, ICustomRequestHandlerFactory},
+    runtime::{IRuntime, Runtime},
     sys,
-    utils::{CStringExt, ThreadSafePointer},
+    utils::{AnySrtingCastRaw, GetSharedRef, ThreadSafePointer},
 };
 
 /// Represents the state of a web page
@@ -99,17 +100,14 @@ impl WindowHandle {
 pub trait WebViewHandler: Send + Sync {
     /// Called when the web page state changes
     ///
-    /// This callback is called when the web page state changes.
+    /// You need to pay attention to status changes, determine whether loading
+    /// was successful, and monitor events related to the page closing.
     fn on_state_change(&self, state: WebViewState) {}
 
     /// Called when the title changes
-    ///
-    /// This callback is called when the title changes.
     fn on_title_change(&self, title: &str) {}
 
     /// Called when the fullscreen state changes
-    ///
-    /// This callback is called when the fullscreen state changes.
     fn on_fullscreen_change(&self, fullscreen: bool) {}
 
     /// Called when a message is received
@@ -125,13 +123,20 @@ pub trait WebViewHandler: Send + Sync {
 pub trait WindowlessRenderWebViewHandler: WebViewHandler {
     /// Called when the IME composition rectangle changes
     ///
-    /// This callback is called when the IME composition rectangle changes.
+    /// When the IME region changes, you should notify the external window.
     fn on_ime_rect(&self, rect: Rect) {}
 
     /// Push a new frame when rendering changes
     ///
     /// This only works in windowless rendering mode.
-    fn on_frame(&self, texture: &[u8], width: u32, height: u32) {}
+    ///
+    /// #### Note:
+    ///
+    /// Fixed as BGRA texture buffer, not padded and not aligned.
+    ///
+    /// It should be noted that if the webview is resized, the width and height
+    /// of the texture will also change.
+    fn on_frame(&self, texture: &[u8], rect: Rect) {}
 }
 
 /// WebView configuration attributes
@@ -385,23 +390,26 @@ impl Deref for WebViewAttributesBuilder {
     }
 }
 
-/// Represents an opened web page
-#[allow(unused)]
-pub struct WebView<R, W> {
-    runtime: Runtime<R, W>,
-    attr: WebViewAttributes,
+pub(crate) struct IWebView {
     mouse_event: Mutex<sys::MouseEvent>,
-    handler: ThreadSafePointer<MixWebviewHnadler>,
+    // The runtime may use a custom request interceptor; a reference is kept here to ensure correct
+    // lifetime management.
+    #[allow(unused)]
+    request_handler_factory: Option<Arc<ICustomRequestHandlerFactory>>,
+    context: ThreadSafePointer<WebViewContext>,
     raw: Mutex<ThreadSafePointer<c_void>>,
 }
 
-impl<R, W> WebView<R, W> {
-    pub(crate) fn new(
-        runtime: Runtime<R, W>,
+impl IWebView {
+    fn new<R, W>(
+        runtime: &Runtime<R, W>,
         url: &str,
         attr: WebViewAttributes,
         handler: MixWebviewHnadler,
     ) -> Result<Self, Error> {
+        let runtime = runtime.get_shared_ref();
+        let raw_runtime = runtime.get_raw();
+
         let options = sys::WebViewSettings {
             width: attr.width,
             height: attr.height,
@@ -425,17 +433,21 @@ impl<R, W> WebView<R, W> {
                 null()
             },
             request_handler_factory: if let Some(it) = &attr.request_handler_factory {
-                it.as_raw_handler().as_ptr() as _
+                it.as_raw().as_ptr() as _
             } else {
                 null()
             },
         };
 
+        let context: *mut WebViewContext = Box::into_raw(Box::new(WebViewContext {
+            runtime: Some(runtime),
+            handler,
+        }));
+
         let url = CString::new(url).unwrap();
-        let handler: *mut MixWebviewHnadler = Box::into_raw(Box::new(handler));
         let ptr = unsafe {
             sys::create_webview(
-                runtime.0.raw.lock().as_ptr(),
+                raw_runtime.as_ptr(),
                 url.as_raw(),
                 &options,
                 sys::WebViewHandler {
@@ -445,7 +457,7 @@ impl<R, W> WebView<R, W> {
                     on_title_change: Some(on_title_change_callback),
                     on_fullscreen_change: Some(on_fullscreen_change_callback),
                     on_message: Some(on_message_callback),
-                    context: handler as _,
+                    context: context as _,
                 },
             )
         };
@@ -457,11 +469,53 @@ impl<R, W> WebView<R, W> {
         };
 
         Ok(Self {
-            mouse_event: Mutex::new(unsafe { std::mem::zeroed() }),
-            handler: ThreadSafePointer::new(handler),
             raw: Mutex::new(raw),
-            runtime,
-            attr,
+            context: ThreadSafePointer::new(context),
+            mouse_event: Mutex::new(unsafe { std::mem::zeroed() }),
+            request_handler_factory: if let Some(it) = &attr.request_handler_factory {
+                Some(it.get_shared_ref())
+            } else {
+                None
+            },
+        })
+    }
+}
+
+impl Drop for IWebView {
+    fn drop(&mut self) {
+        unsafe {
+            sys::close_webview(self.raw.lock().as_ptr());
+        }
+
+        drop(unsafe { Box::from_raw(self.context.as_ptr()) });
+    }
+}
+
+/// Represents an opened web page
+#[allow(unused)]
+pub struct WebView<W> {
+    _w: PhantomData<W>,
+    inner: Arc<IWebView>,
+}
+
+impl<W> GetSharedRef for WebView<W> {
+    type Ref = Arc<IWebView>;
+
+    fn get_shared_ref(&self) -> Self::Ref {
+        self.inner.clone()
+    }
+}
+
+impl<W> WebView<W> {
+    pub(crate) fn new<R>(
+        runtime: &Runtime<R, W>,
+        url: &str,
+        attr: WebViewAttributes,
+        handler: MixWebviewHnadler,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            _w: PhantomData,
+            inner: Arc::new(IWebView::new(runtime, url, attr, handler)?),
         })
     }
 
@@ -475,7 +529,7 @@ impl<R, W> WebView<R, W> {
         let message = CString::new(message).unwrap();
 
         unsafe {
-            sys::webview_send_message(self.raw.lock().as_ptr(), message.as_raw());
+            sys::webview_send_message(self.inner.raw.lock().as_ptr(), message.as_raw());
         }
     }
 
@@ -483,7 +537,7 @@ impl<R, W> WebView<R, W> {
     ///
     /// This function is used to get the window handle.
     pub fn window_handle(&self) -> Option<WindowHandle> {
-        let handle = unsafe { sys::webview_get_window_handle(self.raw.lock().as_ptr()) };
+        let handle = unsafe { sys::webview_get_window_handle(self.inner.raw.lock().as_ptr()) };
         if !handle.is_null() {
             Some(WindowHandle::new(handle))
         } else {
@@ -495,30 +549,28 @@ impl<R, W> WebView<R, W> {
     ///
     /// This function is used to set whether developer tools are enabled.
     pub fn devtools_enabled(&self, enable: bool) {
-        unsafe { sys::webview_set_devtools_state(self.raw.lock().as_ptr(), enable) }
+        unsafe { sys::webview_set_devtools_state(self.inner.raw.lock().as_ptr(), enable) }
     }
 }
 
-impl<R> WebView<R, WindowlessRenderWebView> {
+impl WebView<WindowlessRenderWebView> {
     /// Send a mouse event
     ///
     /// This function is used to send mouse events.
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn mouse(&self, action: &MouseEvent) {
-        use sys::MouseButton as CefMouseButton;
-
-        let mut event = self.mouse_event.lock();
+        let mut event = self.inner.mouse_event.lock();
 
         match action {
             MouseEvent::Move(pos) => unsafe {
                 event.x = pos.x;
                 event.y = pos.y;
 
-                sys::webview_mouse_move(self.raw.lock().as_ptr(), *event)
+                sys::webview_mouse_move(self.inner.raw.lock().as_ptr(), *event)
             },
             MouseEvent::Wheel(pos) => unsafe {
-                sys::webview_mouse_wheel(self.raw.lock().as_ptr(), *event, pos.x, pos.y)
+                sys::webview_mouse_wheel(self.inner.raw.lock().as_ptr(), *event, pos.x, pos.y)
             },
             MouseEvent::Click(button, is_pressed, pos) => {
                 if let Some(pos) = pos {
@@ -528,13 +580,9 @@ impl<R> WebView<R, WindowlessRenderWebView> {
 
                 unsafe {
                     sys::webview_mouse_click(
-                        self.raw.lock().as_ptr(),
+                        self.inner.raw.lock().as_ptr(),
                         *event,
-                        match button {
-                            MouseButton::Left => CefMouseButton::WEBVIEW_MBT_LEFT,
-                            MouseButton::Middle => CefMouseButton::WEBVIEW_MBT_MIDDLE,
-                            MouseButton::Right => CefMouseButton::WEBVIEW_MBT_RIGHT,
-                        },
+                        (*button).into(),
                         *is_pressed,
                     )
                 }
@@ -548,27 +596,19 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn keyboard(&self, event: &KeyboardEvent) {
-        use sys::{EventFlags as CefModifiers, KeyEventType as CefKeyEventType};
+        println!("=============== {:?}", event);
 
-        let mut modifiers = CefModifiers::WEBVIEW_EVENTFLAG_NONE as u32;
+        let mut modifiers = sys::EventFlags::WEBVIEW_EVENTFLAG_NONE as u32;
         for it in KeyboardModifiers::all() {
             if event.modifiers.contains(it) {
-                modifiers |= match it {
-                    KeyboardModifiers::None => CefModifiers::WEBVIEW_EVENTFLAG_NONE,
-                    KeyboardModifiers::Win => CefModifiers::WEBVIEW_EVENTFLAG_COMMAND_DOWN,
-                    KeyboardModifiers::Shift => CefModifiers::WEBVIEW_EVENTFLAG_SHIFT_DOWN,
-                    KeyboardModifiers::Ctrl => CefModifiers::WEBVIEW_EVENTFLAG_CONTROL_DOWN,
-                    KeyboardModifiers::Alt => CefModifiers::WEBVIEW_EVENTFLAG_ALT_DOWN,
-                    KeyboardModifiers::Command => CefModifiers::WEBVIEW_EVENTFLAG_COMMAND_DOWN,
-                    KeyboardModifiers::CapsLock => CefModifiers::WEBVIEW_EVENTFLAG_CAPS_LOCK_ON,
-                    _ => CefModifiers::WEBVIEW_EVENTFLAG_NONE,
-                } as u32;
+                let flag: sys::EventFlags = it.into();
+                modifiers |= flag as u32;
             }
         }
 
         unsafe {
             sys::webview_keyboard(
-                self.raw.lock().as_ptr(),
+                self.inner.raw.lock().as_ptr(),
                 sys::KeyEvent {
                     modifiers,
                     character: event.character,
@@ -577,11 +617,7 @@ impl<R> WebView<R, WindowlessRenderWebView> {
                     native_key_code: event.native_key_code as i32,
                     is_system_key: event.is_system_key as i32,
                     focus_on_editable_field: event.focus_on_editable_field as i32,
-                    type_: match event.ty {
-                        KeyboardEventType::KeyDown => CefKeyEventType::WEBVIEW_KEYEVENT_KEYDOWN,
-                        KeyboardEventType::KeyUp => CefKeyEventType::WEBVIEW_KEYEVENT_KEYUP,
-                        KeyboardEventType::Char => CefKeyEventType::WEBVIEW_KEYEVENT_CHAR,
-                    },
+                    type_: event.ty.into(),
                 },
             )
         }
@@ -599,10 +635,15 @@ impl<R> WebView<R, WindowlessRenderWebView> {
 
         match action {
             IMEAction::Composition(_) => unsafe {
-                sys::webview_ime_composition(self.raw.lock().as_ptr(), input.as_raw())
+                sys::webview_ime_composition(self.inner.raw.lock().as_ptr(), input.as_raw())
             },
             IMEAction::Pre(_, x, y) => unsafe {
-                sys::webview_ime_set_composition(self.raw.lock().as_ptr(), input.as_raw(), *x, *y)
+                sys::webview_ime_set_composition(
+                    self.inner.raw.lock().as_ptr(),
+                    input.as_raw(),
+                    *x,
+                    *y,
+                )
             },
         }
     }
@@ -613,7 +654,13 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn resize(&self, width: u32, height: u32) {
-        unsafe { sys::webview_resize(self.raw.lock().as_ptr(), width as c_int, height as c_int) }
+        unsafe {
+            sys::webview_resize(
+                self.inner.raw.lock().as_ptr(),
+                width as c_int,
+                height as c_int,
+            )
+        }
     }
 
     /// Set the focus state
@@ -622,18 +669,68 @@ impl<R> WebView<R, WindowlessRenderWebView> {
     ///
     /// Note that this function only works in windowless rendering mode.
     pub fn focus(&self, state: bool) {
-        unsafe { sys::webview_set_focus(self.raw.lock().as_ptr(), state) }
+        unsafe { sys::webview_set_focus(self.inner.raw.lock().as_ptr(), state) }
     }
 }
 
-impl<R, W> Drop for WebView<R, W> {
-    fn drop(&mut self) {
-        unsafe {
-            sys::close_webview(self.raw.lock().as_ptr());
-        }
+impl From<sys::WebViewState> for WebViewState {
+    fn from(value: sys::WebViewState) -> Self {
+        use sys::WebViewState;
 
-        drop(unsafe { Box::from_raw(self.handler.as_ptr()) });
+        match value {
+            WebViewState::WEBVIEW_BEFORE_LOAD => Self::BeforeLoad,
+            WebViewState::WEBVIEW_LOADED => Self::Loaded,
+            WebViewState::WEBVIEW_LOAD_ERROR => Self::LoadError,
+            WebViewState::WEBVIEW_REQUEST_CLOSE => Self::RequestClose,
+            WebViewState::WEBVIEW_CLOSE => Self::Close,
+        }
     }
+}
+
+impl Into<sys::KeyEventType> for KeyboardEventType {
+    fn into(self) -> sys::KeyEventType {
+        use sys::KeyEventType;
+
+        match self {
+            Self::KeyDown => KeyEventType::WEBVIEW_KEYEVENT_KEYDOWN,
+            Self::KeyUp => KeyEventType::WEBVIEW_KEYEVENT_KEYUP,
+            Self::Char => KeyEventType::WEBVIEW_KEYEVENT_CHAR,
+        }
+    }
+}
+
+impl Into<sys::EventFlags> for KeyboardModifiers {
+    fn into(self) -> sys::EventFlags {
+        use sys::EventFlags;
+
+        match self {
+            Self::None => EventFlags::WEBVIEW_EVENTFLAG_NONE,
+            Self::Win => EventFlags::WEBVIEW_EVENTFLAG_COMMAND_DOWN,
+            Self::Shift => EventFlags::WEBVIEW_EVENTFLAG_SHIFT_DOWN,
+            Self::Ctrl => EventFlags::WEBVIEW_EVENTFLAG_CONTROL_DOWN,
+            Self::Alt => EventFlags::WEBVIEW_EVENTFLAG_ALT_DOWN,
+            Self::Command => EventFlags::WEBVIEW_EVENTFLAG_COMMAND_DOWN,
+            Self::CapsLock => EventFlags::WEBVIEW_EVENTFLAG_CAPS_LOCK_ON,
+            _ => EventFlags::WEBVIEW_EVENTFLAG_NONE,
+        }
+    }
+}
+
+impl Into<sys::MouseButton> for MouseButton {
+    fn into(self) -> sys::MouseButton {
+        use sys::MouseButton;
+
+        match self {
+            Self::Left => MouseButton::WEBVIEW_MBT_LEFT,
+            Self::Middle => MouseButton::WEBVIEW_MBT_MIDDLE,
+            Self::Right => MouseButton::WEBVIEW_MBT_RIGHT,
+        }
+    }
+}
+
+struct WebViewContext {
+    runtime: Option<Arc<IRuntime>>,
+    handler: MixWebviewHnadler,
 }
 
 pub(crate) enum MixWebviewHnadler {
@@ -646,15 +743,19 @@ extern "C" fn on_state_change_callback(state: sys::WebViewState, context: *mut c
         return;
     }
 
-    let state = match state {
-        sys::WebViewState::WEBVIEW_BEFORE_LOAD => WebViewState::BeforeLoad,
-        sys::WebViewState::WEBVIEW_LOADED => WebViewState::Loaded,
-        sys::WebViewState::WEBVIEW_LOAD_ERROR => WebViewState::LoadError,
-        sys::WebViewState::WEBVIEW_REQUEST_CLOSE => WebViewState::RequestClose,
-        sys::WebViewState::WEBVIEW_CLOSE => WebViewState::Close,
-    };
+    let state = WebViewState::from(state);
+    let context = unsafe { &mut *(context as *mut WebViewContext) };
 
-    match unsafe { &*(context as *mut MixWebviewHnadler) } {
+    // Only after all webviews are closed can the runtime be closed. Here, we clear
+    // the reference held by the current webview.
+    //
+    // If all webviews are closed, the runtime reference will be cleared,
+    // and only then will the runtime's Drop be triggered.
+    if state == WebViewState::Close {
+        drop(context.runtime.take());
+    }
+
+    match &context.handler {
         MixWebviewHnadler::WebViewHandler(handler) => handler.on_state_change(state),
         MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) => {
             handler.on_state_change(state)
@@ -667,9 +768,9 @@ extern "C" fn on_ime_rect_callback(rect: sys::Rect, context: *mut c_void) {
         return;
     }
 
-    if let MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) =
-        unsafe { &*(context as *mut MixWebviewHnadler) }
-    {
+    let context = unsafe { &*(context as *mut WebViewContext) };
+
+    if let MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) = &context.handler {
         handler.on_ime_rect(Rect {
             x: rect.x as u32,
             y: rect.y as u32,
@@ -681,23 +782,36 @@ extern "C" fn on_ime_rect_callback(rect: sys::Rect, context: *mut c_void) {
 
 extern "C" fn on_frame_callback(
     texture: *const c_void,
-    width: c_int,
-    height: c_int,
+    rect: *mut sys::Rect,
     context: *mut c_void,
 ) {
     if context.is_null() {
         return;
     }
 
-    if let MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) =
-        unsafe { &*(context as *mut MixWebviewHnadler) }
-    {
+    let rect = {
+        let value = unsafe { &*rect };
+
+        Rect {
+            x: value.x as u32,
+            y: value.y as u32,
+            width: value.width as u32,
+            height: value.height as u32,
+        }
+    };
+
+    let context = unsafe { &*(context as *mut WebViewContext) };
+
+    if let MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) = &context.handler {
         handler.on_frame(
+            // Fixed as BGRA texture buffer, not padded and not aligned.
             unsafe {
-                std::slice::from_raw_parts(texture as _, width as usize * height as usize * 4)
+                std::slice::from_raw_parts(
+                    texture as _,
+                    rect.width as usize * rect.height as usize * 4,
+                )
             },
-            width as u32,
-            height as u32,
+            rect,
         )
     }
 }
@@ -707,8 +821,10 @@ extern "C" fn on_title_change_callback(title: *const c_char, context: *mut c_voi
         return;
     }
 
+    let context = unsafe { &*(context as *mut WebViewContext) };
+
     if let Ok(title) = unsafe { CStr::from_ptr(title) }.to_str() {
-        match unsafe { &*(context as *mut MixWebviewHnadler) } {
+        match &context.handler {
             MixWebviewHnadler::WebViewHandler(handler) => handler.on_title_change(title),
             MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) => {
                 handler.on_title_change(title)
@@ -721,7 +837,9 @@ extern "C" fn on_fullscreen_change_callback(fullscreen: bool, context: *mut c_vo
         return;
     }
 
-    match unsafe { &*(context as *mut MixWebviewHnadler) } {
+    let context = unsafe { &*(context as *mut WebViewContext) };
+
+    match &context.handler {
         MixWebviewHnadler::WebViewHandler(handler) => handler.on_fullscreen_change(fullscreen),
         MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) => {
             handler.on_fullscreen_change(fullscreen)
@@ -734,8 +852,10 @@ extern "C" fn on_message_callback(message: *const c_char, context: *mut c_void) 
         return;
     }
 
+    let context = unsafe { &*(context as *mut WebViewContext) };
+
     if let Ok(message) = unsafe { CStr::from_ptr(message) }.to_str() {
-        match unsafe { &*(context as *mut MixWebviewHnadler) } {
+        match &context.handler {
             MixWebviewHnadler::WebViewHandler(handler) => handler.on_message(message),
             MixWebviewHnadler::WindowlessRenderWebViewHandler(handler) => {
                 handler.on_message(message)

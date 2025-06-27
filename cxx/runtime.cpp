@@ -5,12 +5,7 @@
 //  Created by mycrl on 2025/6/19.
 //
 
-#ifdef MACOS
-#include "include/wrapper/cef_library_loader.h"
-#endif
-
 #include "runtime.h"
-#include "util.h"
 
 // clang-format off
 IRuntime::IRuntime(const RuntimeSettings *settings, CefSettings cef_settings, RuntimeHandler handler)
@@ -30,8 +25,15 @@ IRuntime::IRuntime(const RuntimeSettings *settings, CefSettings cef_settings, Ru
 }
 // clang-format on
 
+IRuntime::~IRuntime()
+{
+    this->Close();
+}
+
 CefRefPtr<CefBrowserProcessHandler> IRuntime::GetBrowserProcessHandler()
 {
+    CHECK_REFCOUNTING(nullptr);
+
     return this;
 }
 
@@ -52,6 +54,8 @@ void IRuntime::OnBeforeCommandLineProcessing(const CefString &process_type, CefR
 
 void IRuntime::OnContextInitialized()
 {
+    CHECK_REFCOUNTING();
+
     if (_custom_scheme.has_value())
     {
         CefRegisterSchemeHandlerFactory(_custom_scheme.value().name,
@@ -69,6 +73,8 @@ CefRefPtr<CefClient> IRuntime::GetDefaultClient()
 
 void IRuntime::OnScheduleMessagePumpWork(int64_t delay_ms)
 {
+    CHECK_REFCOUNTING();
+
     _handler.on_schedule_message_pump_work(delay_ms, _handler.context);
 }
 
@@ -87,6 +93,8 @@ CefSettings &IRuntime::GetCefSettings()
 
 CefRefPtr<IWebView> IRuntime::CreateWebView(std::string url, const WebViewSettings *settings, WebViewHandler handler)
 {
+    CHECK_REFCOUNTING(nullptr);
+
     CefBrowserSettings broswer_settings;
 
     // clang-format off
@@ -106,21 +114,18 @@ CefRefPtr<IWebView> IRuntime::CreateWebView(std::string url, const WebViewSettin
     // clang-format on
 
     CefWindowInfo window_info;
-    if (settings->window_handle != nullptr)
+    if (_cef_settings.windowless_rendering_enabled)
     {
-        if (_cef_settings.windowless_rendering_enabled)
-        {
-            window_info.SetAsWindowless((CefWindowHandle)(settings->window_handle));
-        }
-        else
+        window_info.SetAsWindowless(settings->window_handle != nullptr ? (CefWindowHandle)(settings->window_handle)
+                                                                       : nullptr);
+    }
+    else
+    {
+        if (settings->window_handle != nullptr)
         {
             CefRect rect(0, 0, settings->width, settings->height);
             window_info.SetAsChild((CefWindowHandle)(settings->window_handle), rect);
         }
-    }
-    else
-    {
-        window_info.SetAsWindowless(nullptr);
     }
 
     CefRefPtr<IWebView> webview = new IWebView(_cef_settings, settings, handler);
@@ -132,142 +137,7 @@ CefRefPtr<IWebView> IRuntime::CreateWebView(std::string url, const WebViewSettin
     return webview;
 }
 
-int get_result_code()
+void IRuntime::Close()
 {
-    return CefGetExitCode();
-}
-
-void run_message_loop()
-{
-    CefRunMessageLoop();
-}
-
-void quit_message_loop()
-{
-    CefQuitMessageLoop();
-}
-
-void poll_message_loop()
-{
-    CefDoMessageLoopWork();
-}
-
-void *create_runtime(const RuntimeSettings *settings, RuntimeHandler handler)
-{
-#ifdef MACOS
-    CefScopedLibraryLoader library_loader;
-    if (!library_loader.LoadInMain())
-    {
-        return nullptr;
-    }
-#endif
-
-    assert(settings != nullptr);
-
-    CefSettings cef_settings;
-
-    cef_log_severity_t a;
-    cef_settings.no_sandbox = true;
-    cef_settings.background_color = settings->background_color;
-    cef_settings.external_message_pump = settings->external_message_pump;
-    cef_settings.persist_session_cookies = settings->persist_session_cookies;
-    cef_settings.disable_signal_handlers = settings->disable_signal_handlers;
-    cef_settings.command_line_args_disabled = settings->command_line_args_disabled;
-    cef_settings.windowless_rendering_enabled = settings->windowless_rendering_enabled;
-    cef_settings.multi_threaded_message_loop = settings->multi_threaded_message_loop;
-    cef_settings.log_severity = static_cast<cef_log_severity_t>(static_cast<int>(settings->log_severity));
-
-    if (settings->cache_path != nullptr)
-    {
-        CefString(&cef_settings.cache_path).FromString(settings->cache_path);
-    }
-
-    if (settings->root_cache_path != nullptr)
-    {
-        CefString(&cef_settings.root_cache_path).FromString(settings->root_cache_path);
-    }
-
-    if (settings->browser_subprocess_path != nullptr)
-    {
-        CefString(&cef_settings.browser_subprocess_path).FromString(settings->browser_subprocess_path);
-    }
-
-    if (settings->framework_dir_path != nullptr)
-    {
-        CefString(&cef_settings.framework_dir_path).FromString(settings->framework_dir_path);
-    }
-
-    if (settings->main_bundle_path != nullptr)
-    {
-        CefString(&cef_settings.main_bundle_path).FromString(settings->main_bundle_path);
-    }
-
-    if (settings->javascript_flags != nullptr)
-    {
-        CefString(&cef_settings.javascript_flags).FromString(settings->javascript_flags);
-    }
-
-    if (settings->resources_dir_path != nullptr)
-    {
-        CefString(&cef_settings.resources_dir_path).FromString(settings->resources_dir_path);
-    }
-
-    if (settings->locales_dir_path != nullptr)
-    {
-        CefString(&cef_settings.locales_dir_path).FromString(settings->locales_dir_path);
-    }
-
-    if (settings->user_agent != nullptr)
-    {
-        CefString(&cef_settings.user_agent).FromString(settings->user_agent);
-    }
-    else
-    {
-        CefString(&cef_settings.locale).FromString("en-US");
-    }
-
-    if (settings->user_agent_product != nullptr)
-    {
-        CefString(&cef_settings.user_agent_product).FromString(settings->user_agent_product);
-    }
-
-    if (settings->locale != nullptr)
-    {
-        CefString(&cef_settings.locale).FromString(settings->locale);
-    }
-
-    if (settings->log_file != nullptr)
-    {
-        CefString(&cef_settings.log_file).FromString(settings->log_file);
-    }
-
-    return new Runtime{new IRuntime(settings, cef_settings, handler)};
-}
-
-bool execute_runtime(void *runtime, int argc, const char **argv)
-{
-    assert(runtime != nullptr);
-
-    auto rt = static_cast<Runtime *>(runtime);
-    auto main_args = get_main_args(argc, argv);
-    return CefInitialize(main_args, rt->ref->GetCefSettings(), rt->ref, nullptr);
-}
-
-void close_runtime(void *runtime)
-{
-    assert(runtime != nullptr);
-
-    CefShutdown();
-
-    delete static_cast<Runtime *>(runtime);
-}
-
-void *create_webview(void *runtime, const char *url, const WebViewSettings *settings, WebViewHandler handler)
-{
-    assert(runtime != nullptr);
-    assert(settings != nullptr);
-    assert(url != nullptr);
-
-    auto webview = static_cast<Runtime *>(runtime)->ref->CreateWebView(std::string(url), settings, handler);
-    return new WebView{webview};
+    CLOSE_RUNNING;
 }

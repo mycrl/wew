@@ -19,6 +19,3 @@ parking_lot = "0.12"
 winit = { version = "0.30.11", features = ["rwh_06"] }
 bytemuck = { version = "1.17", features = ["derive"] }
 wew = { path = "../../", features = ["winit"] }
-
-[build-dependencies]
-cc = "1.2"

@@ -13,6 +13,7 @@
 #include <string>
 
 #include "include/cef_app.h"
+#include "wew.h"
 
 class MessageSender : public CefV8Handler
 {

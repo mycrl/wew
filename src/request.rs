@@ -9,7 +9,10 @@ use std::{
 
 use url::Url;
 
-use crate::{sys, utils::ThreadSafePointer};
+use crate::{
+    sys,
+    utils::{GetSharedRef, ThreadSafePointer},
+};
 
 struct LocalDiskRequestHandler {
     file: Option<File>,
@@ -269,7 +272,7 @@ impl<'a> CustomSchemeAttributes {
     }
 }
 
-struct ICustomRequestHandlerFactory {
+pub(crate) struct ICustomRequestHandlerFactory {
     raw: ThreadSafePointer<Box<dyn RequestHandlerFactory>>,
     raw_handler: ThreadSafePointer<sys::RequestHandlerFactory>,
 }
@@ -304,8 +307,16 @@ impl CustomRequestHandlerFactory {
         }))
     }
 
-    pub(crate) fn as_raw_handler(&self) -> &ThreadSafePointer<sys::RequestHandlerFactory> {
+    pub(crate) fn as_raw(&self) -> &ThreadSafePointer<sys::RequestHandlerFactory> {
         &self.0.raw_handler
+    }
+}
+
+impl GetSharedRef for CustomRequestHandlerFactory {
+    type Ref = Arc<ICustomRequestHandlerFactory>;
+
+    fn get_shared_ref(&self) -> Self::Ref {
+        self.0.clone()
     }
 }
 

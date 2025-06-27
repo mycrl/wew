@@ -14,7 +14,7 @@
 #include "include/cef_request_handler.h"
 #include "include/cef_scheme.h"
 
-#include "library.h"
+#include "wew.h"
 
 struct ICustomSchemeAttributes
 {

@@ -11,8 +11,8 @@ use std::{
 use anyhow::Result;
 use parking_lot::Mutex;
 use wew::{
-    MessageLoopAbstract, MessagePumpLoop, WindowlessRenderWebView,
-    events::{EventAdapter, Rect},
+    MessageLoopAbstract, MessagePumpLoop, Rect, WindowlessRenderWebView,
+    events::EventAdapter,
     log::LevelFilter,
     runtime::{MessagePumpRuntimeHandler, Runtime, RuntimeHandler},
     webview::{
@@ -53,8 +53,8 @@ impl WindowlessRenderWebViewHandler for WebViewObserver {
     // When the webview needs to render, this function will be called.
     //
     // Here we call the renderer to render the webview's output to the window.
-    fn on_frame(&self, texture: &[u8], width: u32, height: u32) {
-        self.render.lock().render(texture, width, height);
+    fn on_frame(&self, texture: &[u8], rect: Rect) {
+        self.render.lock().render(texture, &rect);
     }
 
     // Notify winit of the input cursor position.
@@ -114,7 +114,7 @@ impl MessagePumpRuntimeHandler for RuntimeObserver {
 pub struct Webview {
     #[allow(unused)]
     runtime: Runtime<MessagePumpLoop, WindowlessRenderWebView>,
-    webview: Option<WebView<MessagePumpLoop, WindowlessRenderWebView>>,
+    webview: Option<WebView<WindowlessRenderWebView>>,
     event_loop_proxy: Arc<EventLoopProxy<UserEvent>>,
     event_adapter: EventAdapter,
 }

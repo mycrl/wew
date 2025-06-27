@@ -1,12 +1,12 @@
 //
-//  lib.h
+//  wew.h
 //  webview
 //
 //  Created by mycrl on 2025/6/19.
 //
 
-#ifndef library_h
-#define library_h
+#ifndef wew_h
+#define wew_h
 #pragma once
 
 #ifdef WIN32
@@ -264,7 +264,7 @@ typedef struct
 {
     void (*on_state_change)(WebViewState state, void *context);
     void (*on_ime_rect)(Rect rect, void *context);
-    void (*on_frame)(const void *buf, int width, int height, void *context);
+    void (*on_frame)(const void *buf, Rect *rect, void *context);
     void (*on_title_change)(const char *title, void *context);
     void (*on_fullscreen_change)(bool fullscreen, void *context);
     void (*on_message)(const char *message, void *context);

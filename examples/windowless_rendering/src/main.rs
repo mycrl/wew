@@ -4,13 +4,10 @@
 mod render;
 mod webview;
 
-#[cfg(target_os = "macos")]
-mod delegate;
-
 use std::sync::Arc;
 
 use anyhow::Result;
-use wew::{MessagePumpLoop, events::Rect, webview::WindowHandle};
+use wew::{MessagePumpLoop, Rect, webview::WindowHandle};
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
@@ -22,7 +19,7 @@ use winit::{
 
 static WIDTH: u32 = 1280;
 static HEIGHT: u32 = 720;
-static URL: &str = "https://google.com/";
+static URL: &str = "https://www.zfrontier.com/lab/keyboardTester";
 
 enum UserEvent {
     RuntimeContextInitialized,
@@ -141,8 +138,10 @@ impl ApplicationHandler<UserEvent> for App {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                // When requesting redraw, also drive the webview's message loop.
-                self.message_loop.poll();
+                if self.webview.is_some() {
+                    // When requesting redraw, also drive the webview's message loop.
+                    self.message_loop.poll();
+                }
             }
             _ => {}
         }
@@ -171,9 +170,7 @@ fn main() -> Result<()> {
     // For macOS, we need to inject a delegate for winit, otherwise CEF cannot
     // handle macOS text selection events.
     #[cfg(target_os = "macos")]
-    unsafe {
-        delegate::inject_delegate();
-    }
+    wew::utils::startup_nsapplication();
 
     event_loop.run_app(&mut App::new(event_loop_proxy))?;
     Ok(())

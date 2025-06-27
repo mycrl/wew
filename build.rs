@@ -160,7 +160,7 @@ fn make_bindgen(outdir: &str, cef_dir: &str) -> Result<()> {
         .prepend_enum_name(false)
         .size_t_is_usize(true)
         .clang_arg(format!("-I{}", cef_dir))
-        .header("./cxx/library.h")
+        .header("./cxx/wew.h")
         .generate()?
         .write_to_file(join(outdir, "bindings.rs"))?;
 
@@ -187,6 +187,7 @@ fn make_library(outdir: &str, cef_dir: &str) -> Result<()> {
             "-std=c++20"
         })
         .include(cef_dir)
+        .file("./cxx/wew.cpp")
         .file("./cxx/util.cpp")
         .file("./cxx/runtime.cpp")
         .file("./cxx/request.cpp")

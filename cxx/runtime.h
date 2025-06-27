@@ -14,17 +14,15 @@
 
 #include "include/cef_app.h"
 
-#include "library.h"
 #include "request.h"
 #include "webview.h"
+#include "wew.h"
 
 class IRuntime : public CefApp, public CefBrowserProcessHandler
 {
   public:
     IRuntime(const RuntimeSettings *settings, CefSettings cef_settings, RuntimeHandler handler);
-    ~IRuntime()
-    {
-    }
+    ~IRuntime();
 
     /* CefApp */
 
@@ -67,14 +65,18 @@ class IRuntime : public CefApp, public CefBrowserProcessHandler
     ///
     void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line) override;
 
+    /* custom impl */
+
     CefRefPtr<IWebView> CreateWebView(std::string url, const WebViewSettings *settings, WebViewHandler handler);
     CefSettings &GetCefSettings();
+    void Close();
 
   private:
     std::optional<ICustomSchemeAttributes> _custom_scheme = std::nullopt;
     CefSettings _cef_settings;
     RuntimeHandler _handler;
 
+    IMPLEMENT_RUNNING;
     IMPLEMENT_REFCOUNTING(IRuntime);
 };
 

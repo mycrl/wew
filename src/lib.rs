@@ -1,7 +1,10 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(docsrs, allow(unused_attributes))]
+#![cfg_attr(
+    docsrs,
+    feature(doc_auto_cfg, doc_cfg_hide),
+    doc(cfg_hide(doc, docsrs))
+)]
 
-mod utils;
+pub mod utils;
 
 /// Used to handle window events.
 pub mod events;
@@ -53,6 +56,15 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
+}
+
+/// Represents a rectangular area
+#[derive(Debug, Clone, Copy)]
+pub struct Rect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Message loop abstraction

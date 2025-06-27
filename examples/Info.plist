@@ -2,11 +2,11 @@
 <plist version="1.0">
 	<dict>
 		<key>CFBundleName</key>
-		<string>windowless-rendering</string>
+		<string>{name}</string>
 		<key>CFBundleDisplayName</key>
-		<string>windowless-rendering</string>
+		<string>{name}</string>
 		<key>CFBundleIdentifier</key>
-		<string>com.github.mycrl.hylarana</string>
+		<string>{identifier}</string>
 		<key>CFBundleVersion</key>
 		<string>1.0.0</string>
 		<key>CFBundleShortVersionString</key>
@@ -14,7 +14,7 @@
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleExecutable</key>
-		<string>windowless-rendering</string>
+		<string>{name}</string>
 		<key>LSMinimumSystemVersion</key>
 		<string>15.4</string>
 		<key>NSLocalNetworkUsageDescription</key>

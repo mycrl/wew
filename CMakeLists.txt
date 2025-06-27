@@ -7,7 +7,8 @@ set(CMAKE_SUPPRESS_REGENERATION true)
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY true)
 
 add_library(webview SHARED
-            ./cxx/library.h
+            ./cxx/wew.h
+            ./cxx/wew.cpp
             ./cxx/webview.cpp
             ./cxx/webview.h
             ./cxx/runtime.cpp

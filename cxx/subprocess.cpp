@@ -5,13 +5,7 @@
 //  Created by mycrl on 2025/6/19.
 //
 
-#ifdef MACOS
-#include "include/wrapper/cef_library_loader.h"
-#endif
-
-#include "library.h"
 #include "subprocess.h"
-#include "util.h"
 
 CefRefPtr<CefRenderProcessHandler> ISubProcess::GetRenderProcessHandler()
 {
@@ -112,18 +106,4 @@ void MessageReceiver::Recv(std::string message)
         _callback.value()->ExecuteFunction(nullptr, arguments);
         _context.value()->Exit();
     }
-}
-
-int execute_subprocess(int argc, const char **argv)
-{
-#ifdef MACOS
-    CefScopedLibraryLoader library_loader;
-    if (!library_loader.LoadInHelper())
-    {
-        return -1;
-    }
-#endif
-
-    auto main_args = get_main_args(argc, argv);
-    return CefExecuteProcess(main_args, new ISubProcess, nullptr);
 }

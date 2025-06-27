@@ -16,9 +16,9 @@ use parking_lot::Mutex;
 use crate::{
     Error, MainThreadMessageLoop, MessagePumpLoop, MultiThreadMessageLoop, NativeWindowWebView,
     WindowlessRenderWebView,
-    request::CustomSchemeAttributes,
+    request::{CustomSchemeAttributes, ICustomRequestHandlerFactory},
     sys,
-    utils::{Args, CStringExt, ThreadSafePointer, is_main_thread},
+    utils::{AnySrtingCastRaw, Args, GetSharedRef, ThreadSafePointer, is_main_thread},
     webview::{
         MixWebviewHnadler, WebView, WebViewAttributes, WebViewHandler,
         WindowlessRenderWebViewHandler,
@@ -120,7 +120,7 @@ pub struct RuntimeAttributes<R, W> {
 }
 
 impl<W> RuntimeAttributes<MainThreadMessageLoop, W> {
-    pub fn create_runtime<T>(self, handler: T) -> Result<Runtime<MainThreadMessageLoop, W>, Error>
+    pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MainThreadMessageLoop, W>, Error>
     where
         T: RuntimeHandler + 'static,
     {
@@ -129,7 +129,7 @@ impl<W> RuntimeAttributes<MainThreadMessageLoop, W> {
 }
 
 impl<W> RuntimeAttributes<MultiThreadMessageLoop, W> {
-    pub fn create_runtime<T>(self, handler: T) -> Result<Runtime<MultiThreadMessageLoop, W>, Error>
+    pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MultiThreadMessageLoop, W>, Error>
     where
         T: RuntimeHandler + 'static,
     {
@@ -138,7 +138,7 @@ impl<W> RuntimeAttributes<MultiThreadMessageLoop, W> {
 }
 
 impl<W> RuntimeAttributes<MessagePumpLoop, W> {
-    pub fn create_runtime<T>(self, handler: T) -> Result<Runtime<MessagePumpLoop, W>, Error>
+    pub fn create_runtime<T>(&self, handler: T) -> Result<Runtime<MessagePumpLoop, W>, Error>
     where
         T: MessagePumpRuntimeHandler + 'static,
     {
@@ -375,42 +375,21 @@ pub trait MessagePumpRuntimeHandler: RuntimeHandler {
 
 pub(crate) static RUNTIME_RUNNING: AtomicBool = AtomicBool::new(false);
 
-#[allow(unused)]
-pub(crate) struct IRuntime<R, W> {
-    _r: PhantomData<R>,
-    _w: PhantomData<W>,
+pub(crate) struct IRuntime {
+    // The runtime may use a custom request interceptor; a reference is kept here to ensure correct
+    // lifetime management.
+    #[allow(unused)]
+    request_handler_factory: Option<Arc<ICustomRequestHandlerFactory>>,
+    // Indicates whether the current runtime has been initialized
     initialized: Arc<AtomicBool>,
-    attr: RuntimeAttributes<R, W>,
-    handler: ThreadSafePointer<RuntimeContext>,
-    pub(crate) raw: Mutex<Arc<ThreadSafePointer<c_void>>>,
+    multi_threaded_message_loop: bool,
+    context: ThreadSafePointer<RuntimeContext>,
+    raw: Mutex<Arc<ThreadSafePointer<c_void>>>,
 }
 
-impl<R, W> Drop for IRuntime<R, W> {
-    fn drop(&mut self) {
-        // If using multi-threaded message loop, quit the message loop.
-        if self.attr.multi_threaded_message_loop {
-            MainThreadMessageLoop.quit();
-        }
-
-        unsafe {
-            sys::close_runtime(self.raw.lock().as_ptr());
-        }
-
-        drop(unsafe { Box::from_raw(self.handler.as_ptr()) });
-
-        RUNTIME_RUNNING.store(false, Ordering::Relaxed);
-    }
-}
-
-/// Global unique runtime
-///
-/// The runtime is used to manage multi-process models and message loops.
-#[derive(Clone)]
-pub struct Runtime<R, W>(pub(crate) Arc<IRuntime<R, W>>);
-
-impl<R, W> Runtime<R, W> {
-    pub(crate) fn new(
-        attr: RuntimeAttributes<R, W>,
+impl IRuntime {
+    fn new<R, W>(
+        attr: &RuntimeAttributes<R, W>,
         handler: MixRuntimeHnadler,
     ) -> Result<Self, Error> {
         // Only one runtime is allowed per process, mainly because the runtime is bound
@@ -429,7 +408,7 @@ impl<R, W> Runtime<R, W> {
             .map(|attr| sys::CustomSchemeAttributes {
                 name: attr.name.as_raw(),
                 domain: attr.domain.as_raw(),
-                factory: attr.handler.as_raw_handler().as_ptr(),
+                factory: attr.handler.as_raw().as_ptr(),
             });
 
         let options = sys::RuntimeSettings {
@@ -452,14 +431,7 @@ impl<R, W> Runtime<R, W> {
             framework_dir_path: attr.framework_dir_path.as_raw(),
             external_message_pump: attr.external_message_pump,
             multi_threaded_message_loop: attr.multi_threaded_message_loop,
-            log_severity: match attr.log_severity.unwrap_or(LevelFilter::Off) {
-                LevelFilter::Off => sys::LogLevel::WEBVIEW_LOG_DISABLE,
-                LevelFilter::Info => sys::LogLevel::WEBVIEW_LOG_INFO,
-                LevelFilter::Error => sys::LogLevel::WEBVIEW_LOG_ERROR,
-                LevelFilter::Warn => sys::LogLevel::WEBVIEW_LOG_WARNING,
-                LevelFilter::Debug => sys::LogLevel::WEBVIEW_LOG_DEBUG,
-                LevelFilter::Trace => sys::LogLevel::WEBVIEW_LOG_VERBOSE,
-            },
+            log_severity: attr.log_severity.unwrap_or(LevelFilter::Off).into(),
             custom_scheme: custom_scheme
                 .as_ref()
                 .map(|it| it as *const _)
@@ -467,7 +439,7 @@ impl<R, W> Runtime<R, W> {
         };
 
         let initialized: Arc<AtomicBool> = Default::default();
-        let handler: *mut RuntimeContext = Box::into_raw(Box::new(RuntimeContext {
+        let context: *mut RuntimeContext = Box::into_raw(Box::new(RuntimeContext {
             initialized: initialized.clone(),
             handler,
         }));
@@ -476,9 +448,9 @@ impl<R, W> Runtime<R, W> {
             sys::create_runtime(
                 &options,
                 sys::RuntimeHandler {
-                    on_context_initialized: Some(on_context_initialized),
-                    on_schedule_message_pump_work: Some(on_schedule_message_pump_work),
-                    context: handler as _,
+                    context: context as _,
+                    on_context_initialized: Some(on_context_initialized_callback),
+                    on_schedule_message_pump_work: Some(on_schedule_message_pump_work_callback),
                 },
             )
         };
@@ -508,14 +480,73 @@ impl<R, W> Runtime<R, W> {
 
         RUNTIME_RUNNING.store(true, Ordering::Relaxed);
 
-        Ok(Self(Arc::new(IRuntime {
-            attr,
+        Ok(Self {
             initialized,
             raw: Mutex::new(raw),
-            handler: ThreadSafePointer::new(handler),
+            context: ThreadSafePointer::new(context),
+            multi_threaded_message_loop: attr.multi_threaded_message_loop,
+            request_handler_factory: if let Some(it) = &attr.custom_scheme {
+                Some(it.handler.get_shared_ref())
+            } else {
+                None
+            },
+        })
+    }
+
+    fn is_initialized(&self) -> bool {
+        self.initialized.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn get_raw(&self) -> Arc<ThreadSafePointer<c_void>> {
+        self.raw.lock().clone()
+    }
+}
+
+impl Drop for IRuntime {
+    fn drop(&mut self) {
+        // If using multi-threaded message loop, quit the message loop.
+        if self.multi_threaded_message_loop {
+            MainThreadMessageLoop.quit();
+        }
+
+        RUNTIME_RUNNING.store(false, Ordering::Relaxed);
+
+        unsafe {
+            sys::close_runtime(self.raw.lock().as_ptr());
+        }
+
+        drop(unsafe { Box::from_raw(self.context.as_ptr()) });
+    }
+}
+
+/// Global unique runtime
+///
+/// The runtime is used to manage multi-process models and message loops.
+#[derive(Clone)]
+pub struct Runtime<R, W> {
+    _r: PhantomData<R>,
+    _w: PhantomData<W>,
+    inner: Arc<IRuntime>,
+}
+
+impl<R, W> Runtime<R, W> {
+    pub(crate) fn new(
+        attr: &RuntimeAttributes<R, W>,
+        handler: MixRuntimeHnadler,
+    ) -> Result<Self, Error> {
+        Ok(Self {
             _r: PhantomData,
             _w: PhantomData,
-        })))
+            inner: Arc::new(IRuntime::new(attr, handler)?),
+        })
+    }
+}
+
+impl<R, W> GetSharedRef for Runtime<R, W> {
+    type Ref = Arc<IRuntime>;
+
+    fn get_shared_ref(&self) -> Self::Ref {
+        self.inner.clone()
     }
 }
 
@@ -525,17 +556,17 @@ impl<R> Runtime<R, WindowlessRenderWebView> {
         url: &str,
         attr: WebViewAttributes,
         handler: T,
-    ) -> Result<WebView<R, WindowlessRenderWebView>, Error>
+    ) -> Result<WebView<WindowlessRenderWebView>, Error>
     where
         T: WindowlessRenderWebViewHandler + 'static,
         R: Clone,
     {
-        if !self.0.initialized.load(Ordering::Relaxed) {
+        if !self.inner.is_initialized() {
             return Err(Error::RuntimeNotInitialization);
         }
 
         WebView::new(
-            self.clone(),
+            self,
             url,
             attr,
             MixWebviewHnadler::WindowlessRenderWebViewHandler(Box::new(handler)),
@@ -549,21 +580,34 @@ impl<R> Runtime<R, NativeWindowWebView> {
         url: &str,
         attr: WebViewAttributes,
         handler: T,
-    ) -> Result<WebView<R, NativeWindowWebView>, Error>
+    ) -> Result<WebView<NativeWindowWebView>, Error>
     where
         T: WebViewHandler + 'static,
         R: Clone,
     {
-        if !self.0.initialized.load(Ordering::Relaxed) {
+        if !self.inner.is_initialized() {
             return Err(Error::RuntimeNotInitialization);
         }
 
         WebView::new(
-            self.clone(),
+            self,
             url,
             attr,
             MixWebviewHnadler::WebViewHandler(Box::new(handler)),
         )
+    }
+}
+
+impl Into<sys::LogLevel> for LevelFilter {
+    fn into(self) -> sys::LogLevel {
+        match self {
+            Self::Off => sys::LogLevel::WEBVIEW_LOG_DISABLE,
+            Self::Info => sys::LogLevel::WEBVIEW_LOG_INFO,
+            Self::Error => sys::LogLevel::WEBVIEW_LOG_ERROR,
+            Self::Warn => sys::LogLevel::WEBVIEW_LOG_WARNING,
+            Self::Debug => sys::LogLevel::WEBVIEW_LOG_DEBUG,
+            Self::Trace => sys::LogLevel::WEBVIEW_LOG_VERBOSE,
+        }
     }
 }
 
@@ -577,7 +621,7 @@ pub(crate) enum MixRuntimeHnadler {
     MessagePumpRuntimeHandler(Box<dyn MessagePumpRuntimeHandler>),
 }
 
-extern "C" fn on_context_initialized(context: *mut c_void) {
+extern "C" fn on_context_initialized_callback(context: *mut c_void) {
     if context.is_null() {
         return;
     }
@@ -592,7 +636,7 @@ extern "C" fn on_context_initialized(context: *mut c_void) {
     }
 }
 
-extern "C" fn on_schedule_message_pump_work(delay: i64, context: *mut c_void) {
+extern "C" fn on_schedule_message_pump_work_callback(delay: i64, context: *mut c_void) {
     if context.is_null() {
         return;
     }

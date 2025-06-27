@@ -57,7 +57,9 @@ In the current project, WebView and Runtime calls are best executed on the UI th
 
 Creating a Runtime must be completed on the UI thread, and all message loop calls must also be operated on the UI thread.
 
-Other calls should preferably be made on the UI thread unless it's impossible to do so. While they can be operated from any thread, there's currently no guarantee of no other side effects.
+Other calls should be executed on the UI thread whenever possible, unless it is truly unavoidable. Although these calls can run on any thread, there is currently no guarantee that they will not cause other side effects.
+
+However, it is important to note that if the WebView manages window events on its own, such as not using off-screen rendering, then the WebView can be created on any thread.
 
 ## Packaging and Running
 

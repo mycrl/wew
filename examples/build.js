@@ -13,16 +13,25 @@ const __dirname = dirname(__filename);
 
 // Parse command line arguments after '--' flag
 // Example: node build.js --release
-const Args = process.argv
-    .slice(process.argv.indexOf("--") + 1)
-    .map((item) => item.replace("--", ""))
-    .reduce(
-        (args, item) =>
-            Object.assign(args, {
-                [item]: true,
-            }),
-        {}
-    );
+const Args = process.argv.slice(process.argv.indexOf("--") + 1).reduce(
+    (ctx, item) => {
+        if (typeof item != "string") {
+            item = item.toString();
+        }
+
+        if (item.startsWith("--")) {
+            ctx.last = item.replace("--", "");
+        } else {
+            ctx.args[ctx.last] = item;
+        }
+
+        return ctx;
+    },
+    {
+        last: "",
+        args: {},
+    }
+);
 
 // Helper function to execute shell commands with proper error handling
 // Handles both Windows and Unix-like systems
@@ -74,56 +83,61 @@ async function getCrateOutdir(target, crate, dir) {
 }
 
 void (async () => {
+    const Project = Args.args.project;
+
     await command("cargo build", {
-        cwd: "./",
+        cwd: `./${Project.replace("-", "_")}`,
         env: {
             ...process.env,
             MACOSX_DEPLOYMENT_TARGET: "15.4",
-            CACHE_PATH: resolve(__dirname, "../../target/cache"),
+            CACHE_PATH: resolve(__dirname, "../target/cache"),
         },
     });
 
-    if (!existsSync("../../target/windowless_rendering")) {
-        await mkdir("../../target/windowless_rendering");
+    if (!existsSync("../target/examples")) {
+        await mkdir("../target/examples");
     }
 
     if (process.platform == "win32") {
         const cefOutDir = join(
-            await getCrateOutdir(`../../target/debug`, "wew", "./cef/Release"),
+            await getCrateOutdir(`../target/debug`, "wew", "./cef/Release"),
             "../"
         );
 
+        if (!existsSync(`../target/examples/${Project}`)) {
+            await mkdir(`../target/examples/${Project}`);
+        }
+
         for (const item of [
+            [`../target/debug/${Project}.exe`, `../target/examples/${Project}/${Project}.exe`],
             [
-                `../../target/debug/windowless-rendering.exe`,
-                "../../target/windowless_rendering/windowless-rendering.exe",
+                `../target/debug/${Project}-helper.exe`,
+                `../target/examples/${Project}/${Project}-helper.exe`,
             ],
-            [
-                `../../target/debug/windowless-rendering-helper.exe`,
-                "../../target/windowless_rendering/windowless-rendering-helper.exe",
-            ],
-            [`${cefOutDir}/Release`, "../../target/windowless_rendering/"],
-            [`${cefOutDir}/Resources`, "../../target/windowless_rendering/"],
+            [`${cefOutDir}/Release`, `../target/examples/${Project}/`],
+            [`${cefOutDir}/Resources`, `../target/examples/${Project}/`],
         ]) {
             await cp(...item, { force: true, recursive: true });
         }
 
         for (const path of [
-            "../../target/windowless_rendering/cef_sandbox.lib",
-            "../../target/windowless_rendering/libcef.lib",
+            `../target/examples/${Project}/cef_sandbox.lib`,
+            `../target/examples/${Project}/libcef.lib`,
         ]) {
             if (existsSync(path)) {
                 await rm(path, { force: true, recursive: true });
             }
         }
+
+        await command(`../target/examples/${Project}/${Project}.exe`);
     } else if (process.platform == "darwin") {
-        const cefReleasePath = await getCrateOutdir(`../../target/debug`, "wew", "./cef/Release");
+        const cefReleasePath = await getCrateOutdir(`../target/debug`, "wew", "./cef/Release");
 
         for (const path of [
-            "../../target/windowless_rendering/windowless-rendering.app",
-            "../../target/windowless_rendering/windowless-rendering.app/Contents",
-            "../../target/windowless_rendering/windowless-rendering.app/Contents/MacOS",
-            "../../target/windowless_rendering/windowless-rendering.app/Contents/Frameworks",
+            `../target/examples/${Project}.app`,
+            `../target/examples/${Project}.app/Contents`,
+            `../target/examples/${Project}.app/Contents/MacOS`,
+            `../target/examples/${Project}.app/Contents/Frameworks`,
         ]) {
             if (!existsSync(path)) {
                 await mkdir(path);
@@ -132,32 +146,37 @@ void (async () => {
 
         for (const item of [
             [
-                "./Info.plist",
-                "../../target/windowless_rendering/windowless-rendering.app/Contents/Info.plist",
-            ],
-            [
-                `../../target/debug/windowless-rendering`,
-                "../../target/windowless_rendering/windowless-rendering.app/Contents/MacOS/windowless-rendering",
+                `../target/debug/${Project}`,
+                `../target/examples/${Project}.app/Contents/MacOS/${Project}`,
             ],
             [
                 join(cefReleasePath, "./Chromium Embedded Framework.framework"),
-                "../../target/windowless_rendering/windowless-rendering.app/Contents/Frameworks/Chromium Embedded Framework.framework",
+                `../target/examples/${Project}.app/Contents/Frameworks/Chromium Embedded Framework.framework`,
             ],
         ]) {
             await cp(...item, { force: true, recursive: true });
         }
 
+        {
+            await writeFile(
+                `../target/examples/${Project}.app/Contents/Info.plist`,
+                (await readFile("./Info.plist", "utf8"))
+                    .replaceAll("{name}", Project)
+                    .replaceAll("{identifier}", `com.github.mycrl.wew.${Project}`)
+            );
+        }
+
         // generate helper
         {
             for (const [name, identifier] of [
-                ["windowless-rendering Helper", "com.github.mycrl.wew.helper"],
-                ["windowless-rendering Helper (GPU)", "com.github.mycrl.wew.helper.gpu"],
-                ["windowless-rendering Helper (Plugin)", "com.github.mycrl.wew.helper.plugin"],
-                ["windowless-rendering Helper (Renderer)", "com.github.mycrl.wew.helper.renderer"],
+                [`${Project} Helper`, `com.github.mycrl.wew.${Project}.helper`],
+                [`${Project} Helper (GPU)`, `com.github.mycrl.wew.${Project}.helper.gpu`],
+                [`${Project} Helper (Plugin)`, `com.github.mycrl.wew.${Project}.helper.plugin`],
+                [`${Project} Helper (Renderer)`, `com.github.mycrl.wew.${Project}.helper.renderer`],
             ]) {
                 const helperPath = join(
                     __dirname,
-                    "../../target/windowless_rendering/windowless-rendering.app/Contents/Frameworks",
+                    `../target/examples/${Project}.app/Contents/Frameworks`,
                     `./${name}.app`
                 );
 
@@ -171,15 +190,14 @@ void (async () => {
                     await writeFile(
                         join(helperPath, "Contents/Info.plist"),
                         (await readFile("./helper.Info.plist", "utf8"))
-                            .replace("{{CFBundleName}}", name)
-                            .replace("{{CFBundleExecutable}}", name)
-                            .replace("{{CFBundleIdentifier}}", identifier)
+                            .replaceAll("{name}", name)
+                            .replaceAll("{identifier}", identifier)
                     );
                 }
 
                 for (const item of [
                     [
-                        `../../target/debug/windowless-rendering-helper`,
+                        `../target/debug/${Project}-helper`,
                         join(helperPath, `Contents/MacOS/${name}`),
                     ],
                 ]) {
@@ -196,5 +214,7 @@ void (async () => {
                     "${join(helperPath, `Contents/MacOS/${name}`)}"`);
             }
         }
+
+        await command(`../target/examples/${Project}.app/Contents/MacOS/${Project}`);
     }
 })();
