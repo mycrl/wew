@@ -108,14 +108,14 @@ pub struct KeyboardEvent {
 #[derive(Default)]
 pub struct EventAdapter {
     modifiers: KeyboardModifiers,
-    allow_ime: bool
+    allow_ime: bool,
 }
 
 #[cfg(feature = "winit")]
 mod winit_impl {
     use winit::{
-        event::{Ime, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent, KeyEvent},
-        keyboard::{Key, KeyCode, ModifiersState, NativeKeyCode, PhysicalKey},
+        event::{Ime, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent},
+        keyboard::{Key, KeyCode, ModifiersState, PhysicalKey},
         platform::{
             modifier_supplement::KeyEventExtModifierSupplement, scancode::PhysicalKeyExtScancode,
         },
@@ -185,28 +185,30 @@ mod winit_impl {
                             *selection_start as i32,
                         ));
                     }
-                    // Because key events are triggered before IME events, an extra character is
-                    // output. If IME events are enabled, the previously entered
-                    // character should be deleted.
                     Ime::Enabled => {
                         self.allow_ime = true;
 
-                        let mut event = KeyboardEvent {
-                            ty: KeyboardEventType::KeyDown,
-                            modifiers: KeyboardModifiers::None,
-                            windows_key_code: 8,
-                            native_key_code: 14,
-                            is_system_key: 0,
-                            character: 8,
-                            unmodified_character: 8,
-                            focus_on_editable_field: false,
-                        };
+                        // Because key events are triggered before IME events, an extra character is
+                        // output. If IME events are enabled, the previously entered character
+                        // should be deleted.
+                        {
+                            let mut event = KeyboardEvent {
+                                ty: KeyboardEventType::KeyDown,
+                                modifiers: KeyboardModifiers::None,
+                                windows_key_code: 8,
+                                native_key_code: 14,
+                                is_system_key: 0,
+                                character: 8,
+                                unmodified_character: 8,
+                                focus_on_editable_field: false,
+                            };
 
-                        webview.keyboard(&event);
+                            webview.keyboard(&event);
 
-                        event.ty = KeyboardEventType::KeyUp;
+                            event.ty = KeyboardEventType::KeyUp;
 
-                        webview.keyboard(&event);
+                            webview.keyboard(&event);
+                        }
                     }
                     Ime::Disabled => {
                         self.allow_ime = false;
@@ -229,7 +231,127 @@ mod winit_impl {
                     }
                 }
                 WindowEvent::KeyboardInput { event: input, .. } => {
-                    self.windows_key_event(input, webview);
+                    let mut event = KeyboardEvent::default();
+                    event.ty = if input.state.is_pressed() {
+                        KeyboardEventType::KeyDown
+                    } else {
+                        KeyboardEventType::KeyUp
+                    };
+
+                    // If it is not a definite key position, just ignore it.
+                    let key_code = if let PhysicalKey::Code(code) = input.physical_key {
+                        event.native_key_code = code.to_scancode().unwrap_or(0);
+
+                        code
+                    } else {
+                        return;
+                    };
+
+                    // Get the character of the current key position, there may be cases where it
+                    // does not exist, but it is normal for the character not to exist, such as
+                    // control keys.
+                    if let Some(text) = input.text.as_ref().map(|it| it.as_str()).or_else(|| {
+                        if let Key::Character(text) = &input.logical_key {
+                            Some(text.as_str())
+                        } else {
+                            input.text_with_all_modifiers()
+                        }
+                    }) {
+                        if let Some(character) = text.chars().next() {
+                            event.unmodified_character = character as u16;
+                            event.character = character as u16;
+                        }
+                    }
+
+                    if cfg!(target_os = "windows") {
+                        // On Windows, keyboard key events and IME events exist at the same time, so
+                        // they need to be filtered here. If currently processing IME events, do not
+                        // process keyboard events.
+                        if self.allow_ime {
+                            return;
+                        }
+
+                        // Windows-specific handling, because there will be capslock keyboard events
+                        // on Windows, so if capslock is pressed here, it needs to be added to
+                        // modifiers.
+                        if !input.state.is_pressed() {
+                            if let PhysicalKey::Code(KeyCode::CapsLock) = input.physical_key {
+                                self.modifiers |= KeyboardModifiers::CapsLock;
+                            }
+                        }
+
+                        // Windows-specific window virtual key code.
+                        #[cfg(target_os = "windows")]
+                        {
+                            event.windows_key_code = unsafe {
+                                MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK_EX)
+                            };
+                        }
+
+                        event.modifiers = self.modifiers;
+
+                        webview.keyboard(&event);
+
+                        // On Windows, only non-control keys can send char events.
+                        if input.state.is_pressed() && is_char(&key_code) {
+                            if let Some((base, upcase)) = get_symbol_mapping(&key_code) {
+                                // At this point, it means a symbol key is pressed. By default, the
+                                // windows key code for symbols is incorrect and needs to be mapped
+                                // manually. Here, it considers whether the shift key is pressed at
+                                // the same time.
+                                event.windows_key_code =
+                                    if self.modifiers.contains(KeyboardModifiers::Shift) {
+                                        *upcase as u32
+                                    } else {
+                                        *base as u32
+                                    };
+                            } else {
+                                // By default it is uppercase, needs to be shifted by 32 bits to
+                                // change to lowercase.
+                                event.windows_key_code += 32;
+                            }
+
+                            event.ty = KeyboardEventType::Char;
+
+                            webview.keyboard(&event);
+                        }
+                    } else {
+                        event.modifiers = self.modifiers;
+
+                        // On macOS, modifiers need special handling. If a modifier key is pressed,
+                        // add it to the current event's modifiers. If released, remove it from the
+                        // event's modifiers. I know this is strange, but on macOS, modifiers are
+                        // directly determined by the modifiers property for press and release,
+                        // regardless of the specific key code.
+                        if let Some(modifiers) = match key_code {
+                            KeyCode::CapsLock => Some(KeyboardModifiers::CapsLock),
+                            KeyCode::AltLeft | KeyCode::AltRight => Some(KeyboardModifiers::Alt),
+                            KeyCode::ControlLeft | KeyCode::ControlRight => {
+                                Some(KeyboardModifiers::Ctrl)
+                            }
+                            KeyCode::ShiftLeft | KeyCode::ShiftRight => {
+                                Some(KeyboardModifiers::Shift)
+                            }
+                            KeyCode::SuperLeft | KeyCode::SuperRight => {
+                                Some(KeyboardModifiers::Command)
+                            }
+                            _ => None,
+                        } {
+                            if input.state.is_pressed() {
+                                event.modifiers |= modifiers;
+                            } else {
+                                event.modifiers.remove(modifiers);
+                            }
+                        }
+
+                        webview.keyboard(&event);
+
+                        if input.state.is_pressed() {
+                            event.ty = KeyboardEventType::Char;
+
+                            webview.keyboard(&event);
+                        }
+                    }
                 }
                 WindowEvent::MouseInput { state, button, .. } => {
                     webview.mouse(&MouseEvent::Click(
@@ -266,93 +388,6 @@ mod winit_impl {
                     webview.resize(size.width, size.height);
                 }
                 _ => {}
-            }
-        }
-    }
-
-    trait WindowsKeyEventExt {
-        fn windows_key_event(&mut self, input: &KeyEvent, webview: &WebView<WindowlessRenderWebView>);
-    }
-
-    impl WindowsKeyEventExt for EventAdapter {
-        fn windows_key_event(&mut self, input: &KeyEvent, webview: &WebView<WindowlessRenderWebView>) {
-            if self.allow_ime {
-                return;
-            }
-
-            if !input.state.is_pressed() {
-                if let PhysicalKey::Code(KeyCode::CapsLock) = input.physical_key {
-                    self.modifiers |= KeyboardModifiers::CapsLock;
-                }
-            }
-
-            let mut event = KeyboardEvent::default();
-            let mut allow_char_mode = false;
-            let mut symbol_mapping = None;
-
-            event.modifiers = self.modifiers;
-            event.ty = if input.state.is_pressed() {
-                KeyboardEventType::KeyDown
-            } else {
-                KeyboardEventType::KeyUp
-            };
-
-            event.native_key_code = match input.physical_key {
-                PhysicalKey::Code(code) => {
-                    allow_char_mode = is_char(&code);
-
-                    if allow_char_mode {
-                        symbol_mapping = get_symbol_mapping(&code)
-                    }
-
-                    if let Some(scancode) = code.to_scancode() {
-                        scancode as u32
-                    } else {
-                        0
-                    }
-                }
-                _ => return,
-            };
-
-            if let Some(text) = input.text.as_ref().map(|it| it.as_str()).or_else(|| {
-                if let Key::Character(text) = &input.logical_key {
-                    Some(text.as_str())
-                } else {
-                    input.text_with_all_modifiers()
-                }
-            }) {
-                if let Some(character) = text.chars().next() {
-                    event.unmodified_character = character as u16;
-                    event.character = character as u16;
-                }
-            }
-
-            #[cfg(target_os = "windows")]
-            {
-                event.windows_key_code =
-                    unsafe { MapVirtualKeyA(event.native_key_code, MAPVK_VSC_TO_VK_EX) };
-            }
-
-            webview.keyboard(&event);
-
-            // When the key is pressed, an additional `char` event must be sent.
-            if input.state.is_pressed() {
-                event.ty = KeyboardEventType::Char;
-
-                if allow_char_mode {
-                    if let Some((base, upcase)) = symbol_mapping {
-                        event.windows_key_code =
-                            if self.modifiers.contains(KeyboardModifiers::Shift) {
-                                *upcase as u32
-                            } else {
-                                *base as u32
-                            };
-                    } else {
-                        event.windows_key_code += 32;
-                    }
-
-                    webview.keyboard(&event);
-                }
             }
         }
     }
